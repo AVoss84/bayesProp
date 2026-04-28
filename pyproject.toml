@@ -1,0 +1,57 @@
+[build-system]
+requires = [
+    "setuptools>=61.0",
+    "wheel"
+]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "project-template"
+version = "0.1.0"
+description = "Basic data science project template"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "uvicorn",
+    "fastapi",
+    "pandas",
+    "PyYAML",
+    "toml",
+    "streamlit",
+    "mypy",
+    "black",
+    "types-pyyaml",
+    "types-toml",
+    "pytest"
+]
+
+keywords = ["Data Science", "Project template"]
+
+authors = [
+    { name = "Alexander Vosseler", email = "avosseler@nemetschek.com" }
+]
+
+[project.optional-dependencies]
+notebook = [
+  "jupyter",
+  "ipykernel",
+]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["my_package*"]
+
+[tool.mypy]
+python_version = "3.10"
+disallow_untyped_defs = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+addopts = "-ra"
+testpaths = [
+    "tests"
+]
