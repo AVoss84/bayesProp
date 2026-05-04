@@ -1,18 +1,20 @@
 [build-system]
-requires = [
-    "setuptools>=61.0",
-    "wheel"
-]
+requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "bayesAB"
 version = "0.1.0"
-description = "Basic data science project template"
+description = "Bayesian A/B testing for proportions"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
-    "pytest",
+    "matplotlib>=3.10.9",
+    "numpy>=2.4.4",
+    "pandas>=3.0.2",
+    "polyagamma>=2.0.2",
+    "pydantic>=2.13.3",
+    "scipy>=1.17.1",
 ]
 
 keywords = ["Bayesian inference", "A/B testing", "Proportions"]
@@ -21,10 +23,31 @@ authors = [
     { name = "Alexander Vosseler", email = "avosseler@nemetschek.com" }
 ]
 
-[project.optional-dependencies]
-notebook = [
-  "jupyter",
-  "ipykernel",
+[dependency-groups]
+dev = [
+    {include-group = "format"},
+    {include-group = "test"},
+    {include-group = "docs"},
+    "jupyter",
+    "ipykernel",
+    "pre-commit>=4.6.0",
+]
+format = [
+    "mypy>=1.15.0",
+    "ruff>=0.8.0",
+]
+test = [
+    "types-pyyaml",
+    "types-toml",
+    "isort",
+    "pytest==8.3.*",
+    "pytest-mock",
+    "pytest-timeout",
+    "pytest-cov",
+]
+docs = [
+    "mkdocs-material",
+    "mkdocstrings[python]",
 ]
 
 [tool.setuptools]
@@ -36,12 +59,102 @@ include = ["bayesAB*"]
 
 [tool.mypy]
 python_version = "3.13"
-disallow_untyped_defs = true
 ignore_missing_imports = true
+check_untyped_defs = true
+warn_return_any = true
+warn_unreachable = true
+warn_redundant_casts = true
+disallow_untyped_defs = true
 
 [tool.pytest.ini_options]
-minversion = "6.0"
-addopts = "-ra"
-testpaths = [
-    "tests"
+testpaths = ["tests"]
+addopts = "-ra -v"
+pythonpath = ["src"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+markers = [
+    "integration: Integration tests",
+    "unit: Unit tests",
 ]
+
+[tool.coverage.run]
+source = ["src/bayesAB"]
+
+[tool.coverage.report]
+skip_covered = true
+show_missing = true
+
+[tool.ruff]
+line-length = 120
+indent-width = 4
+exclude = [
+  ".bzr",
+  ".direnv",
+  ".eggs",
+  ".git",
+  ".git-rewrite",
+  ".hg",
+  ".ipynb_checkpoints",
+  ".mypy_cache",
+  ".nox",
+  ".pants.d",
+  ".pyenv",
+  ".pytest_cache",
+  ".pytype",
+  ".ruff_cache",
+  ".svn",
+  ".tox",
+  ".venv",
+  ".vscode",
+  "__pypackages__",
+  "_build",
+  "buck-out",
+  "build",
+  "dist",
+  "node_modules",
+  "site-packages",
+  "venv",
+]
+
+[tool.ruff.lint]
+ignore = [
+  "E203",  # whitespace before ':', (Black compatibility)
+  "E266",  # too many '#' block (optional)
+  "E501",  # line too long
+  "S101",  # Use of assert detected.
+  "S311",  # Standard pseudo-random generators are not suitable for cryptographic purposes
+  "PT018", # Assertion should be broken down into multiple parts
+  "D100",  # Missing docstring in public module
+  "D101",  # Missing docstring in public class
+  "D104",  # Missing docstring in public package
+  "PT007", # Wrong values type in `pytest.mark.parametrize` expected `list` of `tuple`
+  "D212",  # Multi-line docstring summary should start at the first line
+  "D200",  # One-line docstring should fit on one line
+  "D205",  # 1 blank line required between summary line and description
+  "D415",  # First line should end with a period, question mark, or exclamation point
+  "D107",  # Missing docstring in `__init__`
+  "W291",  # Trailing whitespace
+]
+select = [
+  "S",     # bandit
+  "B",     # bugbear
+  "Q",     # quotes
+  "PT",    # pytest
+  "I",     # isort
+  "E",     # code style (error)
+  "W",     # code style (warning)
+  "F",     # pyflakes
+  "D",     # docstring (pydocstyle)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["D102"]  # Test methods don't need docstrings
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"

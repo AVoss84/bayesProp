@@ -1,0 +1,87 @@
+# yaml-language-server: $schema=https://squidfunk.github.io/mkdocs-material/schema.json
+site_name: bayesAB
+site_description: Bayesian A/B testing for proportions
+site_url: https://AVoss84.github.io/bayesianAB/
+
+repo_name: AVoss84/bayesianAB
+repo_url: https://github.com/AVoss84/bayesianAB
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: deep purple
+      accent: deep purple
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: deep purple
+      accent: deep purple
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.sections
+    - navigation.expand
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - toc.follow
+
+markdown_extensions:
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - admonition
+  - pymdownx.details
+  - attr_list
+  - md_in_html
+  - toc:
+      permalink: true
+
+extra_javascript:
+  - javascripts/mathjax.js
+  - https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [../../src]
+          options:
+            docstring_style: google
+            show_source: true
+            show_root_heading: true
+            show_root_full_path: false
+            members_order: source
+            merge_init_into_class: true
+            show_if_no_docstring: false
+            heading_level: 3
+
+nav:
+  - Home: index.md
+  - Getting Started: getting_started.md
+  - User Guide:
+      - Non-Paired Model: guide/nonpaired.md
+      - Paired Model (Laplace): guide/paired_laplace.md
+      - Paired Model (Pólya-Gamma): guide/paired_pg.md
+      - Sample Size Planning (BFDA): guide/bfda.md
+  - API Reference:
+      - Overview: api/index.md
+      - Data Schemas: api/data_schemas.md
+      - Non-Paired Model: api/bayes_nonpaired.md
+      - Paired Model (Laplace): api/bayes_paired_laplace.md
+      - Paired Model (Pólya-Gamma): api/bayes_paired_pg.md
+      - Utilities: api/bfda_utils.md

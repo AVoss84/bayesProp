@@ -1,6 +1,5 @@
 import os
 from pathlib import Path
-from typing import Optional
 
 package_root = Path(__file__).resolve().parents[3]
 

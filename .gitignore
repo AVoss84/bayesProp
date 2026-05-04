@@ -129,3 +129,6 @@ dmypy.json
 /logs/
 
 uv.lock
+
+.DS_Store
+.deepeval-cache.json/
