@@ -19,13 +19,12 @@ source .venv/bin/activate
 Use this when model A and model B are evaluated on **different** items.
 
 ```python
-import numpy as np
 from bayesAB.resources.bayes_nonpaired import NonPairedBayesPropTest
+from bayesAB.utils.utils import simulate_nonpaired_scores
 
 # Simulate binary outcomes
-rng = np.random.default_rng(42)
-y_A = rng.binomial(1, 0.85, size=100).astype(float)
-y_B = rng.binomial(1, 0.70, size=100).astype(float)
+sim = simulate_nonpaired_scores(N=100, theta_A=0.85, theta_B=0.70, seed=42)
+y_A, y_B = sim["y_A"], sim["y_B"]
 
 # Fit the model
 model = NonPairedBayesPropTest(seed=42, n_samples=20_000).fit(y_A, y_B)
@@ -48,8 +47,12 @@ Use this when **both** models are evaluated on the **same** items.
 
 ```python
 from bayesAB.resources.bayes_paired_laplace import PairedBayesPropTest
+from bayesAB.utils.utils import simulate_paired_scores
 
-# y_A[i] and y_B[i] refer to the same item
+# Simulate paired binary data (y_A[i] and y_B[i] refer to the same item)
+sim = simulate_paired_scores(N=100, delta_A=0.5, seed=42)
+y_A, y_B = sim["y_A"], sim["y_B"]
+
 model = PairedBayesPropTest(seed=42).fit(y_A, y_B)
 model.print_summary()
 model.plot_savage_dickey()
@@ -60,6 +63,7 @@ For exact MCMC inference with convergence diagnostics:
 ```python
 from bayesAB.resources.bayes_paired_pg import PairedBayesPropTestPG
 
+# Reuse paired data from above
 model = PairedBayesPropTestPG(seed=42, n_iter=2000, burn_in=500, n_chains=4)
 model.fit(y_A, y_B)
 model.print_summary()

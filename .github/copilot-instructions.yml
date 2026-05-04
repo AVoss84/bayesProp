@@ -1,0 +1,169 @@
+# GitHub Copilot Instructions — bayesAB
+
+> Instructions for GitHub Copilot when working in the **bayesAB** repository
+> (Bayesian A/B testing for proportions).
+
+---
+
+## 1  Pre-commit Gate (Non-negotiable)
+
+Every PR **must** pass the pre-commit pipeline defined in `.pre-commit-config.yaml`.
+Review changes against these hooks in order:
+
+| Hook | Command | When |
+|---|---|---|
+| **Ruff Format** | `uv run ruff format` | Always (auto-runs on commit) |
+| **Ruff Lint** | `uv run ruff check --fix` | Always (auto-runs on commit) |
+| **Mypy (incremental)** | `uv run mypy` | Manual stage — run before opening PR |
+| **Mypy (full project)** | `uv run mypy src/bayesAB` | Manual stage — run for large changes |
+
+Flag any diff that would fail these hooks:
+- Formatting inconsistencies that `ruff format` would change (line-length 120, double quotes, space indent).
+- Lint violations from the enabled rule sets: `S`, `B`, `Q`, `PT`, `I`, `E`, `W`, `F`, `D` (Google pydocstyle).
+- mypy type errors — new code must be clean under `check_untyped_defs`, `warn_return_any`, `warn_unreachable`, `disallow_untyped_defs`.
+
+---
+
+## 2  Documentation (Keep Docs Up to Date)
+
+> **Before every commit, check whether the change requires a documentation update — and make it.**
+
+The project documentation lives in `docs/mkdocs/docs/` and is built with MkDocs Material.
+When code changes affect any of the areas below, the corresponding doc **must** be updated in the same commit:
+
+| Change area | Doc to update |
+|---|---|
+| Model classes, public API, constructor signatures | `api/` pages (auto-generated via `mkdocstrings` — ensure docstrings are correct) |
+| Getting-started examples, quick-start code | `getting_started.md` |
+| Project overview, feature list | `index.md` |
+| Model usage walkthroughs | `guide/` pages |
+| New model or major feature | Add new page **and** register in `nav:` of `mkdocs.yml` |
+
+### Rules
+
+- [ ] Only update docs when the change actually affects documented behaviour — don't touch docs for pure refactors with no external impact.
+- [ ] Keep the existing tone, structure, and formatting of each doc file.
+- [ ] Code examples in docs must use the package's own utility functions (e.g. `simulate_nonpaired_scores`, `simulate_paired_scores`) — never raw `np.random` data generation.
+- [ ] Flag any PR that changes user-facing behaviour without a corresponding doc update.
+
+---
+
+## 3  Core Principles
+
+### 3.1  Extend Existing Patterns — Don't Create Parallel Ones
+
+- [ ] New models follow the established pattern in `resources/` (`.fit()` → `.summary` → `.savage_dickey_test()` etc.).
+- [ ] All inference results are returned as **Pydantic models** from `data_schemas.py` — never raw dicts.
+- [ ] Simulation / BFDA utilities go in `utils/utils.py` — not as static methods on model classes.
+- [ ] If a class or utility already handles 80 % of the need, **extend it** rather than writing a new module.
+- [ ] Flag any PR that introduces a new file when the functionality could live in an existing one.
+
+### 3.2  Keep It Simple & Readable
+
+- [ ] Prefer **fewer, well-named functions** over many small ones with unclear boundaries.
+- [ ] Functions ≤ 60 lines; if longer, explain why or add a `TODO` for later extraction.
+- [ ] New code should be understandable by someone unfamiliar with the PR within one read-through.
+- [ ] Avoid clever abstractions — straightforward code that follows existing patterns is always preferred.
+- [ ] Inline comments explain **why**, not **what**.
+
+### 3.3  Use Config Files — Never Hardcode Values
+
+- [ ] Runtime settings come from **YAML config** (`model_config.yaml`, `input_output.yaml`) or `global_config.py`.
+- [ ] No hardcoded file paths, secrets, or API keys in source code.
+
+---
+
+## 4  Code Quality Checklist
+
+### 4.1  Typing & Signatures
+
+- [ ] **All** new/changed function signatures have full type annotations (params + return).
+- [ ] No new `Any` introduced without explicit justification.
+- [ ] Use `list[str]` (lowercase builtins) not `List[str]`. Use `X | None` not `Optional[X]`.
+- [ ] `# type: ignore` comments include the error code and an explanation.
+
+### 4.2  Docstrings (Google style)
+
+- [ ] Every new/changed **public** class and function has a docstring.
+- [ ] First line ≤ 80 chars, imperative mood.
+- [ ] `Args:`, `Returns:`, `Raises:` sections present when applicable.
+
+### 4.3  Error Handling
+
+- [ ] No bare `except:` blocks — always catch specific exceptions.
+- [ ] No silent `except … pass` — must log or re-raise.
+
+### 4.4  Dependencies
+
+- [ ] New dependencies added to `pyproject.toml` with version constraint (`>=X.Y.Z`).
+- [ ] Use `uv sync` / `uv run` — never raw `pip install`.
+
+### 4.5  Testing
+
+- [ ] New logic has corresponding tests in `tests/`.
+- [ ] Tests are named `test_<module>.py` and follow existing patterns (`pytest` fixtures, parametrize).
+- [ ] No test depends on network or external services without an appropriate marker.
+
+---
+
+## 5  Project Context
+
+| Aspect | Detail |
+|---|---|
+| **Language** | Python ≥ 3.13 |
+| **Package manager** | `uv` (NOT pip) |
+| **Task runner** | `just` (see `justfile`) |
+| **Linter / Formatter** | Ruff (`line-length = 120`, Google-style docstrings) |
+| **Type checker** | mypy (`warn_return_any`, `warn_unreachable`, `disallow_untyped_defs`) |
+| **Tests** | pytest (`tests/` directory) |
+| **Docs** | MkDocs Material + mkdocstrings (`docs/mkdocs/`) |
+| **Data contracts** | Pydantic v2 (`data_schemas.py`) |
+| **Pre-commit** | ruff format, ruff lint (auto); mypy (manual) |
+
+### Key directories
+
+```
+src/bayesAB/
+├── config/                    # global_config, YAML configs
+├── resources/
+│   ├── bayes_nonpaired.py     # NonPairedBayesPropTest (Beta-Bernoulli)
+│   ├── bayes_paired_laplace.py # PairedBayesPropTest (Laplace approx.)
+│   ├── bayes_paired_pg.py     # PairedBayesPropTestPG (Pólya-Gamma Gibbs)
+│   ├── bfda_utils.py          # BFDA helpers
+│   └── data_schemas.py        # Pydantic models for all results
+├── services/
+│   └── file.py                # CSV / JSON / YAML / XLSX I/O
+└── utils/
+    └── utils.py               # simulate, BFDA power curves, plot helpers
+src/notebooks/                 # Jupyter notebooks (non-paired, paired Laplace, paired PG)
+tests/                         # Unit tests
+docs/mkdocs/                   # MkDocs Material site
+```
+
+---
+
+## 6  Severity Guidance
+
+| Severity | Meaning | Examples |
+|---|---|---|
+| 🔴 **Blocker** | Must fix before merge | Pre-commit hook failure, missing type annotations, returning raw dict instead of Pydantic model, broken API contract |
+| 🟡 **Warning** | Should fix, not a merge blocker | Missing docstring, overly broad exception catch, function > 60 lines |
+| 🔵 **Suggestion** | Nice-to-have improvement | Naming refinement, extracting a helper, adding an inline comment |
+
+---
+
+## 7  Review Tone
+
+- Be **constructive and specific** — always explain *why* something is an issue and suggest a fix.
+- Reference the relevant rule (e.g. "per §3.1, return a Pydantic model instead of a raw dict").
+- Acknowledge good patterns when you see them.
+
+---
+
+## 8  Out of Scope for Copilot Review
+
+Do **not** flag the following (they are known / intentional):
+- `E501` line-length violations — explicitly suppressed in ruff config.
+- `D100`, `D101`, `D104`, `D107` missing docstrings — suppressed for modules, classes, packages, and `__init__`.
+- `ignore_missing_imports = true` in mypy config — third-party stubs are incomplete.
+- `S101` use of `assert` — suppressed (used freely in tests and assertions).
