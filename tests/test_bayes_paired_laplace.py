@@ -15,9 +15,11 @@ from bayesAB.resources.bayes_paired_laplace import (
     sigmoid,
 )
 from bayesAB.resources.data_schemas import (
+    HypothesisDecision,
     PairedSummary,
     PosteriorProbH0Result,
     PPCStatistic,
+    ROPEResult,
     SavageDickeyResult,
 )
 
@@ -189,6 +191,48 @@ class TestPairedLaplacePlots:
         fitted_model.print_summary()
         captured = capsys.readouterr()
         assert "P(A > B)" in captured.out
+
+
+class TestPairedLaplaceRopeTest:
+    """Tests for PairedBayesPropTest.rope_test method."""
+
+    def test_returns_rope_result(self, fitted_model: PairedBayesPropTest) -> None:
+        r = fitted_model.rope_test()
+        assert isinstance(r, ROPEResult)
+
+    def test_delta_samples_stored(self, fitted_model: PairedBayesPropTest) -> None:
+        """fit() should store delta_samples for rope_test."""
+        assert fitted_model.delta_samples is not None
+        assert len(fitted_model.delta_samples) > 0
+
+    def test_custom_rope(self, fitted_model: PairedBayesPropTest) -> None:
+        r = fitted_model.rope_test(rope=(-0.10, 0.10))
+        assert r.rope_lower == pytest.approx(-0.10)
+        assert r.rope_upper == pytest.approx(0.10)
+
+
+class TestPairedLaplaceDecide:
+    """Tests for PairedBayesPropTest.decide method."""
+
+    def test_returns_hypothesis_decision(self, fitted_model: PairedBayesPropTest) -> None:
+        d = fitted_model.decide()
+        assert isinstance(d, HypothesisDecision)
+
+    def test_all_rule_populates_all(self, fitted_model: PairedBayesPropTest) -> None:
+        d = fitted_model.decide(rule="all")
+        assert d.bayes_factor is not None
+        assert d.posterior_null is not None
+        assert d.rope is not None
+
+    def test_bf_only(self, fitted_model: PairedBayesPropTest) -> None:
+        d = fitted_model.decide(rule="bayes_factor")
+        assert d.bayes_factor is not None
+        assert d.rope is None
+
+    def test_rope_only(self, fitted_model: PairedBayesPropTest) -> None:
+        d = fitted_model.decide(rule="rope")
+        assert d.rope is not None
+        assert d.bayes_factor is None
 
 
 class TestPairedLaplaceStatic:

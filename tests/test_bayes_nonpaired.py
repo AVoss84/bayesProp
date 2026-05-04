@@ -16,10 +16,12 @@ from bayesAB.resources.bayes_nonpaired import (
     descriptive_summary,
 )
 from bayesAB.resources.data_schemas import (
+    HypothesisDecision,
     NonPairedSummary,
     NonPairedTestResult,
     PosteriorProbH0Result,
     PPCStatistic,
+    ROPEResult,
     SavageDickeyResult,
 )
 
@@ -193,6 +195,16 @@ class TestNonPairedPosteriorProbH0:
     def test_strong_evidence_for_h0(self) -> None:
         result = NonPairedBayesPropTest.posterior_probability_H0(100.0, prior_H0=0.5)
         assert result.p_H0 > 0.95
+        assert result.decision == "Fail to reject H0"
+
+    def test_strong_evidence_against_h0(self) -> None:
+        result = NonPairedBayesPropTest.posterior_probability_H0(0.01, prior_H0=0.5)
+        assert result.p_H1 > 0.95
+        assert result.decision == "Reject H0"
+
+    def test_undecided(self) -> None:
+        result = NonPairedBayesPropTest.posterior_probability_H0(1.0, prior_H0=0.5)
+        assert result.decision == "Undecided"
 
 
 class TestNonPairedPPC:
@@ -260,6 +272,75 @@ class TestNonPairedStatic:
         NonPairedBayesPropTest.print_comparison_table(results)
         captured = capsys.readouterr()
         assert "metric1" in captured.out
+
+
+# ── rope_test / decide ────────────────────────────────────────
+
+
+class TestNonPairedRopeTest:
+    """Tests for NonPairedBayesPropTest.rope_test method."""
+
+    def test_returns_rope_result(self, fitted_model: NonPairedBayesPropTest) -> None:
+        r = fitted_model.rope_test()
+        assert isinstance(r, ROPEResult)
+
+    def test_rope_bounds_match_epsilon(self) -> None:
+        """Default rope matches rope_epsilon."""
+        rng = np.random.default_rng(42)
+        y_a = rng.binomial(1, 0.7, size=60).astype(float)
+        y_b = rng.binomial(1, 0.7, size=60).astype(float)
+        m = NonPairedBayesPropTest(seed=42, rope_epsilon=0.05).fit(y_a, y_b)
+        r = m.rope_test()
+        assert r.rope_lower == pytest.approx(-0.05)
+        assert r.rope_upper == pytest.approx(0.05)
+
+    def test_custom_rope_override(self, fitted_model: NonPairedBayesPropTest) -> None:
+        r = fitted_model.rope_test(rope=(-0.10, 0.10))
+        assert r.rope_lower == pytest.approx(-0.10)
+        assert r.rope_upper == pytest.approx(0.10)
+
+    def test_large_effect_rejects(self) -> None:
+        """With a clear effect and tight ROPE, should reject."""
+        rng = np.random.default_rng(42)
+        y_a = rng.binomial(1, 0.9, size=200).astype(float)
+        y_b = rng.binomial(1, 0.5, size=200).astype(float)
+        m = NonPairedBayesPropTest(seed=42, n_samples=10_000).fit(y_a, y_b)
+        r = m.rope_test(rope=(-0.02, 0.02))
+        assert "Reject" in r.decision
+
+
+class TestNonPairedDecide:
+    """Tests for NonPairedBayesPropTest.decide method."""
+
+    def test_returns_hypothesis_decision(self, fitted_model: NonPairedBayesPropTest) -> None:
+        d = fitted_model.decide()
+        assert isinstance(d, HypothesisDecision)
+
+    def test_all_rule_populates_all(self, fitted_model: NonPairedBayesPropTest) -> None:
+        d = fitted_model.decide(rule="all")
+        assert d.bayes_factor is not None
+        assert d.posterior_null is not None
+        assert d.rope is not None
+        assert d.rule == "all"
+
+    def test_bf_only(self, fitted_model: NonPairedBayesPropTest) -> None:
+        d = fitted_model.decide(rule="bayes_factor")
+        assert d.bayes_factor is not None
+        assert d.posterior_null is None
+        assert d.rope is None
+
+    def test_rope_only(self, fitted_model: NonPairedBayesPropTest) -> None:
+        d = fitted_model.decide(rule="rope")
+        assert d.rope is not None
+        assert d.bayes_factor is None
+        assert d.posterior_null is None
+
+    def test_posterior_null_includes_bf(self, fitted_model: NonPairedBayesPropTest) -> None:
+        """posterior_null rule needs BF internally, so BF should be populated."""
+        d = fitted_model.decide(rule="posterior_null")
+        assert d.bayes_factor is not None
+        assert d.posterior_null is not None
+        assert d.rope is None
 
 
 # ── descriptive_summary ──────────────────────────────────────

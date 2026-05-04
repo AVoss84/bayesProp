@@ -8,7 +8,15 @@ from __future__ import annotations
 
 from typing import Literal
 
+import numpy as np
+import numpy.typing as npt
 from pydantic import BaseModel, Field
+
+# ====================================================================== #
+#  Decision rule type
+# ====================================================================== #
+
+DecisionRuleType = Literal["bayes_factor", "posterior_null", "rope", "all"]
 
 # ====================================================================== #
 #  Shared / common schemas
@@ -47,6 +55,10 @@ class PosteriorProbH0Result(BaseModel):
     p_H1: float = Field(..., alias="P(H1|data)", description="Posterior P(H1).")
     prior_odds: float = Field(..., description="Prior odds in favour of H0.")
     posterior_odds: float = Field(..., description="Posterior odds in favour of H0.")
+    decision: str = Field(
+        ...,
+        description="Decision: 'Reject H0', 'Fail to reject H0', or 'Undecided'.",
+    )
 
     model_config = {"populate_by_name": True}
 
@@ -153,3 +165,102 @@ class MCMCDiagnostics(BaseModel):
 
     mu: MCMCParamDiagnostic = Field(..., description="Diagnostics for mu.")
     delta_A: MCMCParamDiagnostic = Field(..., description="Diagnostics for delta_A.")
+
+
+# ====================================================================== #
+#  ROPE decision
+# ====================================================================== #
+
+
+class ROPEResult(BaseModel):
+    """Result of a ROPE (Region of Practical Equivalence) analysis.
+
+    Decision rules (Kruschke, 2018):
+
+    - 95% CI entirely **outside** ROPE → Reject H₀
+    - 95% CI entirely **inside** ROPE → Accept H₀
+    - 95% CI **overlaps** ROPE → Undecided
+    """
+
+    rope_lower: float = Field(..., description="Lower bound of the ROPE.")
+    rope_upper: float = Field(..., description="Upper bound of the ROPE.")
+    ci_lower: float = Field(..., description="Lower bound of the credible interval.")
+    ci_upper: float = Field(..., description="Upper bound of the credible interval.")
+    ci_mass: float = Field(default=0.95, ge=0, le=1, description="Mass of the credible interval.")
+    pct_in_rope: float = Field(..., ge=0, le=1, description="Fraction of posterior inside ROPE.")
+    pct_below_rope: float = Field(..., ge=0, le=1, description="Fraction of posterior below ROPE.")
+    pct_above_rope: float = Field(..., ge=0, le=1, description="Fraction of posterior above ROPE.")
+    decision: str = Field(
+        ...,
+        description="Decision: 'Reject H0 — A practically better', 'Accept H0', or 'Undecided'.",
+    )
+    interpretation: str = Field(..., description="Human-readable interpretation of the ROPE analysis.")
+
+    @classmethod
+    def from_samples(
+        cls,
+        samples: npt.NDArray[np.floating],
+        rope: tuple[float, float] = (-0.02, 0.02),
+        ci_mass: float = 0.95,
+    ) -> ROPEResult:
+        """Compute ROPE decision from posterior samples.
+
+        Args:
+            samples: 1-D array of posterior draws for Δ (e.g. θ_A − θ_B).
+            rope: (lower, upper) bounds of the ROPE.
+            ci_mass: Credible interval mass (default 95%).
+
+        Returns:
+            Populated :class:`ROPEResult`.
+        """
+        alpha = (1 - ci_mass) / 2
+        ci_lower = float(np.quantile(samples, alpha))
+        ci_upper = float(np.quantile(samples, 1 - alpha))
+
+        pct_in = float(np.mean((samples >= rope[0]) & (samples <= rope[1])))
+        pct_below = float(np.mean(samples < rope[0]))
+        pct_above = float(np.mean(samples > rope[1]))
+
+        if ci_lower > rope[1]:
+            decision = "Reject H0 — A practically better"
+            interpretation = "95% CI entirely above ROPE — meaningful positive effect"
+        elif ci_upper < rope[0]:
+            decision = "Reject H0 — B practically better"
+            interpretation = "95% CI entirely below ROPE — meaningful negative effect"
+        elif ci_lower >= rope[0] and ci_upper <= rope[1]:
+            decision = "Accept H0 — practically equivalent"
+            interpretation = "95% CI entirely inside ROPE — effect is negligible"
+        else:
+            decision = "Undecided — CI overlaps ROPE"
+            interpretation = "95% CI overlaps ROPE boundary — more data needed"
+
+        return cls(
+            rope_lower=rope[0],
+            rope_upper=rope[1],
+            ci_lower=ci_lower,
+            ci_upper=ci_upper,
+            ci_mass=ci_mass,
+            pct_in_rope=pct_in,
+            pct_below_rope=pct_below,
+            pct_above_rope=pct_above,
+            decision=decision,
+            interpretation=interpretation,
+        )
+
+
+# ====================================================================== #
+#  Composite hypothesis decision
+# ====================================================================== #
+
+
+class HypothesisDecision(BaseModel):
+    """Composite hypothesis test result combining multiple decision frameworks.
+
+    Depending on the chosen :attr:`rule`, one or more of the sub-results
+    will be populated.
+    """
+
+    bayes_factor: SavageDickeyResult | None = Field(default=None, description="Savage-Dickey Bayes factor result.")
+    posterior_null: PosteriorProbH0Result | None = Field(default=None, description="Posterior probability of H₀.")
+    rope: ROPEResult | None = Field(default=None, description="ROPE analysis result.")
+    rule: DecisionRuleType = Field(default="all", description="Which decision rule was applied.")

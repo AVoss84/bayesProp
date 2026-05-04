@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import numpy as np
 import pytest
 from pydantic import ValidationError
 
 from bayesAB.resources.data_schemas import (
     BetaParams,
     CredibleInterval,
+    HypothesisDecision,
     MCMCDiagnostics,
     MCMCParamDiagnostic,
     NonPairedConfig,
@@ -18,6 +20,7 @@ from bayesAB.resources.data_schemas import (
     PairedSummary,
     PosteriorProbH0Result,
     PPCStatistic,
+    ROPEResult,
     SavageDickeyResult,
 )
 
@@ -81,14 +84,23 @@ class TestPosteriorProbH0Result:
                 "P(H1|data)": 0.7,
                 "prior_odds": 1.0,
                 "posterior_odds": 0.43,
+                "decision": "Reject H0",
             }
         )
         assert result.p_H0 == 0.3
         assert result.p_H1 == 0.7
+        assert result.decision == "Reject H0"
 
     def test_field_name_construction(self) -> None:
-        result = PosteriorProbH0Result(p_H0=0.3, p_H1=0.7, prior_odds=1.0, posterior_odds=0.43)
+        result = PosteriorProbH0Result(
+            p_H0=0.3,
+            p_H1=0.7,
+            prior_odds=1.0,
+            posterior_odds=0.43,
+            decision="Reject H0",
+        )
         assert result.p_H0 == 0.3
+        assert result.decision == "Reject H0"
 
 
 class TestPPCStatistic:
@@ -239,3 +251,115 @@ class TestMCMCDiagnostics:
         data = diag.model_dump()
         assert "mu" in data
         assert data["mu"]["r_hat"] == 1.0
+
+
+class TestROPEResult:
+    """Tests for ROPEResult schema and from_samples classmethod."""
+
+    def test_valid_construction(self) -> None:
+        r = ROPEResult(
+            rope_lower=-0.02,
+            rope_upper=0.02,
+            ci_lower=0.05,
+            ci_upper=0.20,
+            pct_in_rope=0.0,
+            pct_below_rope=0.0,
+            pct_above_rope=1.0,
+            decision="Reject H0 — A practically better",
+            interpretation="95% CI entirely above ROPE",
+        )
+        assert r.pct_above_rope == 1.0
+        assert r.ci_mass == 0.95  # default
+
+    def test_from_samples_reject_h0_positive(self) -> None:
+        """Large positive effect → CI above ROPE → Reject H0."""
+        rng = np.random.default_rng(42)
+        samples = rng.normal(0.20, 0.03, size=10_000)
+        r = ROPEResult.from_samples(samples, rope=(-0.02, 0.02))
+        assert r.decision == "Reject H0 — A practically better"
+        assert r.ci_lower > 0.02
+
+    def test_from_samples_reject_h0_negative(self) -> None:
+        """Large negative effect → CI below ROPE → B better."""
+        rng = np.random.default_rng(42)
+        samples = rng.normal(-0.20, 0.03, size=10_000)
+        r = ROPEResult.from_samples(samples, rope=(-0.02, 0.02))
+        assert r.decision == "Reject H0 — B practically better"
+        assert r.ci_upper < -0.02
+
+    def test_from_samples_accept_h0(self) -> None:
+        """Tiny effect with very tight posterior → CI inside ROPE → Accept H0."""
+        rng = np.random.default_rng(42)
+        samples = rng.normal(0.0, 0.005, size=10_000)
+        r = ROPEResult.from_samples(samples, rope=(-0.02, 0.02))
+        assert r.decision == "Accept H0 — practically equivalent"
+        assert r.ci_lower >= -0.02
+        assert r.ci_upper <= 0.02
+
+    def test_from_samples_undecided(self) -> None:
+        """Moderate uncertainty → CI overlaps ROPE → Undecided."""
+        rng = np.random.default_rng(42)
+        samples = rng.normal(0.02, 0.04, size=10_000)
+        r = ROPEResult.from_samples(samples, rope=(-0.02, 0.02))
+        assert r.decision == "Undecided — CI overlaps ROPE"
+
+    def test_pct_fractions_sum_to_one(self) -> None:
+        """Posterior fractions below / in / above ROPE should sum to ~1."""
+        rng = np.random.default_rng(42)
+        samples = rng.normal(0.01, 0.05, size=10_000)
+        r = ROPEResult.from_samples(samples, rope=(-0.02, 0.02))
+        assert abs(r.pct_in_rope + r.pct_below_rope + r.pct_above_rope - 1.0) < 0.01
+
+    def test_custom_ci_mass(self) -> None:
+        """Non-default ci_mass is respected."""
+        rng = np.random.default_rng(42)
+        samples = rng.normal(0.0, 0.05, size=10_000)
+        r90 = ROPEResult.from_samples(samples, rope=(-0.02, 0.02), ci_mass=0.90)
+        r99 = ROPEResult.from_samples(samples, rope=(-0.02, 0.02), ci_mass=0.99)
+        assert r90.ci_mass == 0.90
+        assert r99.ci_mass == 0.99
+        # 99% CI should be wider than 90% CI
+        assert (r99.ci_upper - r99.ci_lower) > (r90.ci_upper - r90.ci_lower)
+
+    def test_pct_in_rope_bounds(self) -> None:
+        with pytest.raises(ValidationError):
+            ROPEResult(
+                rope_lower=-0.02,
+                rope_upper=0.02,
+                ci_lower=0.0,
+                ci_upper=0.1,
+                pct_in_rope=1.5,
+                pct_below_rope=0.0,
+                pct_above_rope=0.0,
+                decision="x",
+                interpretation="x",
+            )
+
+
+class TestHypothesisDecision:
+    """Tests for HypothesisDecision schema."""
+
+    def test_defaults(self) -> None:
+        d = HypothesisDecision(rule="all")
+        assert d.bayes_factor is None
+        assert d.posterior_null is None
+        assert d.rope is None
+
+    def test_with_bayes_factor(self) -> None:
+        bf = SavageDickeyResult(
+            BF_01=0.1,
+            BF_10=10.0,
+            posterior_density_at_0=0.5,
+            prior_density_at_0=5.0,
+            interpretation="Strong evidence against H0",
+            decision="Reject H0",
+        )
+        d = HypothesisDecision(bayes_factor=bf, rule="bayes_factor")
+        assert d.bayes_factor is not None
+        assert d.bayes_factor.BF_10 == 10.0
+
+    def test_serialization_roundtrip(self) -> None:
+        d = HypothesisDecision(rule="rope")
+        data = d.model_dump()
+        assert data["rule"] == "rope"
+        assert HypothesisDecision(**data) == d

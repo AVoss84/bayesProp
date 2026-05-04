@@ -36,9 +36,12 @@ from scipy.stats import gaussian_kde, norm
 
 from bayesAB.resources.data_schemas import (
     CredibleInterval,
+    DecisionRuleType,
+    HypothesisDecision,
     PairedSummary,
     PosteriorProbH0Result,
     PPCStatistic,
+    ROPEResult,
     SavageDickeyResult,
 )
 
@@ -95,6 +98,8 @@ class PairedBayesPropTest:
         prior_sigma_delta: float = 1.0,
         seed: int = 0,
         n_samples: int = 8000,
+        decision_rule: DecisionRuleType = "all",
+        rope_epsilon: float = 0.02,
     ) -> None:
         """Initialise model configuration.
 
@@ -103,16 +108,22 @@ class PairedBayesPropTest:
                 ``delta_A`` (logit scale).
             seed: Random seed for reproducibility.
             n_samples: Number of draws from the Laplace posterior.
+            decision_rule: Default decision framework — one of
+                ``"bayes_factor"``, ``"posterior_null"``, ``"rope"``, or ``"all"``.
+            rope_epsilon: Half-width of the ROPE interval (default 0.02 = 2 pp).
         """
         self.prior_sigma_delta: float = prior_sigma_delta
         self.seed: int = seed
         self.n_samples: int = n_samples
+        self.decision_rule: DecisionRuleType = decision_rule
+        self.rope_epsilon: float = rope_epsilon
 
         # --- Populated by .fit() ---
         self.laplace: dict[str, Any] | None = None
         self.summary: dict[str, Any] | None = None
         self.trace_summary: pd.DataFrame | None = None
         self.delta_A_samples: np.ndarray | None = None
+        self.delta_samples: np.ndarray | None = None
         self.y_A_obs: np.ndarray | None = None
         self.y_B_obs: np.ndarray | None = None
 
@@ -218,6 +229,7 @@ class PairedBayesPropTest:
         Delta_s = pA_s - pB_s
 
         self.delta_A_samples = delta_A_s
+        self.delta_samples = Delta_s
 
         self.summary = PairedSummary(
             mean_delta=float(Delta_s.mean()),
@@ -338,11 +350,79 @@ class PairedBayesPropTest:
         prior_odds = prior_H0 / (1 - prior_H0)
         posterior_odds = BF_01 * prior_odds
         P_H0 = posterior_odds / (1 + posterior_odds)
+        P_H1 = 1 - P_H0
+
+        if P_H1 > 0.95:
+            decision = "Reject H0"
+        elif P_H0 > 0.95:
+            decision = "Fail to reject H0"
+        else:
+            decision = "Undecided"
+
         return PosteriorProbH0Result(
-            **{"P(H0|data)": P_H0, "P(H1|data)": 1 - P_H0},
+            **{"P(H0|data)": P_H0, "P(H1|data)": P_H1},
             prior_odds=prior_odds,
             posterior_odds=posterior_odds,
+            decision=decision,
         )
+
+    # ------------------------------------------------------------------ #
+    #  ROPE analysis
+    # ------------------------------------------------------------------ #
+
+    def rope_test(
+        self,
+        rope: tuple[float, float] | None = None,
+        ci_mass: float = 0.95,
+    ) -> ROPEResult:
+        """ROPE analysis on the posterior of Δ = p_A − p_B (probability scale).
+
+        Args:
+            rope: (lower, upper) ROPE bounds. Defaults to
+                ``(-self.rope_epsilon, +self.rope_epsilon)``.
+            ci_mass: Credible interval mass (default 95%).
+
+        Returns:
+            :class:`ROPEResult` with CI, ROPE overlap fractions, and
+            decision.
+        """
+        self._check_fitted()
+        if rope is None:
+            rope = (-self.rope_epsilon, self.rope_epsilon)
+        return ROPEResult.from_samples(self.delta_samples, rope=rope, ci_mass=ci_mass)
+
+    # ------------------------------------------------------------------ #
+    #  Composite decision
+    # ------------------------------------------------------------------ #
+
+    def decide(self, rule: DecisionRuleType | None = None) -> HypothesisDecision:
+        """Run the chosen decision framework(s) and return a composite result.
+
+        Args:
+            rule: Override the default ``decision_rule``. One of
+                ``"bayes_factor"``, ``"posterior_null"``, ``"rope"``,
+                or ``"all"``.
+
+        Returns:
+            :class:`HypothesisDecision` with the requested sub-results
+            populated.
+        """
+        self._check_fitted()
+        rule = rule or self.decision_rule
+
+        bf: SavageDickeyResult | None = None
+        pn: PosteriorProbH0Result | None = None
+        rp: ROPEResult | None = None
+
+        if rule in ("bayes_factor", "posterior_null", "all"):
+            bf = self.savage_dickey_test()
+        if rule in ("posterior_null", "all"):
+            assert bf is not None  # noqa: S101
+            pn = self.posterior_probability_H0(bf.BF_01)
+        if rule in ("rope", "all"):
+            rp = self.rope_test()
+
+        return HypothesisDecision(bayes_factor=bf, posterior_null=pn, rope=rp, rule=rule)
 
     # ------------------------------------------------------------------ #
     #  Diagnostics
