@@ -45,33 +45,6 @@ graph TD
 <small>**Legend:** grey = hyperparameters, blue = latent parameters, green = deterministic,
 yellow = observed data.</small>
 
-### Directed Acyclic Graph (DAG)
-
-```mermaid
-graph TD
-    sigma_mu(["σ_μ"]) --> mu["μ"]
-    sigma_delta(["σ_δ"]) --> delta_A["δ_A"]
-
-    mu --> pA["p_A = σ(μ + δ_A)"]
-    delta_A --> pA
-    mu --> pB["p_B = σ(μ)"]
-
-    pA --> yA(["y_A,i"])
-    pB --> yB(["y_B,i"])
-
-    style sigma_mu fill:#e0e0e0,stroke:#757575
-    style sigma_delta fill:#e0e0e0,stroke:#757575
-    style mu fill:#bbdefb,stroke:#1565c0
-    style delta_A fill:#bbdefb,stroke:#1565c0
-    style pA fill:#c8e6c9,stroke:#2e7d32
-    style pB fill:#c8e6c9,stroke:#2e7d32
-    style yA fill:#fff9c4,stroke:#f9a825
-    style yB fill:#fff9c4,stroke:#f9a825
-```
-
-<small>**Legend:** grey = hyperparameters, blue = latent parameters, green = deterministic,
-yellow = observed data.</small>
-
 ## When to use
 
 - **Exact inference** — no approximation error, exact up to MCMC error
@@ -108,6 +81,12 @@ print(f"δ_A: R-hat={diag.delta_A.r_hat:.3f}, ESS={diag.delta_A.ess:.0f}")
 # Hypothesis test
 bf = model.savage_dickey_test()
 print(f"BF₁₀ = {bf.BF_10:.2f}  →  {bf.decision}")
+
+# Unified decision (BF + P(H₀) + ROPE)
+d = model.decide()
+print(f"BF:   {d.bayes_factor.decision}")
+print(f"P(H₀): {d.posterior_null.decision}")
+print(f"ROPE: {d.rope.decision}  ({d.rope.pct_in_rope:.1%} in ROPE)")
 ```
 
 ## MCMC diagnostics

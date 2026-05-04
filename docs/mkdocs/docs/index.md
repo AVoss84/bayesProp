@@ -7,6 +7,8 @@
 - **Non-paired Beta-Bernoulli model** — conjugate posterior with exact Savage-Dickey Bayes factor via log-space convolution (no KDE)
 - **Paired logistic model (Laplace)** — fast MAP + Hessian approximation for paired binary data
 - **Paired logistic model (Pólya-Gamma)** — exact MCMC via Gibbs sampling with convergence diagnostics (R-hat, ESS)
+- **Unified decision framework** — `model.decide()` runs Bayes factor, posterior null probability, and ROPE analysis in a single call
+- **ROPE analysis** — Region of Practical Equivalence testing with automatic CI-based decisions (Kruschke, 2018)
 - **Bayes Factor Design Analysis (BFDA)** — Bayesian sample-size planning with power curves
 - **Pydantic data contracts** — typed, validated return values for all inference results
 - **Publication-ready plots** — posteriors, Savage-Dickey visualisation, forest plots, comparison tables
@@ -23,8 +25,10 @@ y_A, y_B = sim["y_A"], sim["y_B"]
 model = NonPairedBayesPropTest(seed=42).fit(y_A, y_B)
 model.print_summary()
 
-bf = model.savage_dickey_test()
-print(f"BF₁₀ = {bf.BF_10:.2f}  →  {bf.decision}")
+# Unified decision (BF + P(H₀) + ROPE in one call)
+d = model.decide()
+print(f"BF₁₀ = {d.bayes_factor.BF_10:.2f}  →  {d.bayes_factor.decision}")
+print(f"ROPE: {d.rope.decision}  ({d.rope.pct_in_rope:.1%} in ROPE)")
 ```
 
 ## Models at a glance
@@ -39,4 +43,5 @@ print(f"BF₁₀ = {bf.BF_10:.2f}  →  {bf.decision}")
 
 - [Getting Started](getting_started.md) — installation and first steps
 - [User Guide](guide/nonpaired.md) — detailed walkthroughs for each model
+- [Decision Rules](guide/decision_rules.md) — ROPE, Bayes factor, and the unified `decide()` API
 - [API Reference](api/index.md) — full module documentation

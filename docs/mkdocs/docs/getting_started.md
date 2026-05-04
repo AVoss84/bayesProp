@@ -32,9 +32,10 @@ model = NonPairedBayesPropTest(seed=42, n_samples=20_000).fit(y_A, y_B)
 # Print summary
 model.print_summary()
 
-# Hypothesis test
-bf = model.savage_dickey_test()
-print(f"BF₁₀ = {bf.BF_10:.2f}  →  {bf.decision}")
+# Unified decision (Bayes factor + P(H₀) + ROPE)
+d = model.decide()
+print(f"BF₁₀ = {d.bayes_factor.BF_10:.2f}  →  {d.bayes_factor.decision}")
+print(f"ROPE: {d.rope.decision}  ({d.rope.pct_in_rope:.1%} in ROPE)")
 
 # Visualise
 model.plot_posteriors()
@@ -55,6 +56,12 @@ y_A, y_B = sim["y_A"], sim["y_B"]
 
 model = PairedBayesPropTest(seed=42).fit(y_A, y_B)
 model.print_summary()
+
+# Unified decision
+d = model.decide()
+print(f"BF₁₀ = {d.bayes_factor.BF_10:.2f}  →  {d.bayes_factor.decision}")
+print(f"ROPE: {d.rope.decision}")
+
 model.plot_savage_dickey()
 ```
 
@@ -111,8 +118,10 @@ All inference methods return **Pydantic models** with typed, validated fields:
 |--------|-------------|
 | `model.test()` | `NonPairedTestResult` |
 | `model.fit()` → `model.summary` | `NonPairedSummary` / `PairedSummary` |
+| `model.decide()` | `HypothesisDecision` |
 | `model.savage_dickey_test()` | `SavageDickeyResult` |
 | `model.posterior_probability_H0()` | `PosteriorProbH0Result` |
+| `model.rope_test()` | `ROPEResult` |
 | `model.ppc_pvalues()` | `dict[str, PPCStatistic]` |
 | `model.mcmc_diagnostics()` | `MCMCDiagnostics` |
 

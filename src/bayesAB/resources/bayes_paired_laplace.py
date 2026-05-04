@@ -299,7 +299,7 @@ class PairedBayesPropTest:
         prior_at_null = float(norm.pdf(null_value, 0, self.prior_sigma_delta))
 
         BF_01 = posterior_at_null / prior_at_null
-        BF_10 = 1.0 / BF_01
+        BF_10 = 1.0 / BF_01 if BF_01 > 0 else float("inf")
 
         if BF_10 > 100:
             interpretation = "Decisive evidence against H0"

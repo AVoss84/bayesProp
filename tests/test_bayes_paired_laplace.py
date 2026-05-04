@@ -75,6 +75,10 @@ class TestFormatBf:
     def test_large_value(self) -> None:
         assert "10^" in _format_bf(1e5)
 
+    def test_small_positive(self) -> None:
+        result = _format_bf(1e-6)
+        assert "10^" in result
+
 
 # ── PairedBayesPropTest ──────────────────────────────────────
 
@@ -91,6 +95,11 @@ class TestPairedLaplaceInit:
         model = PairedBayesPropTest(prior_sigma_delta=2.0, seed=99, n_samples=3000)
         assert model.prior_sigma_delta == 2.0
         assert model.seed == 99
+
+    def test_check_fitted_raises(self) -> None:
+        model = PairedBayesPropTest()
+        with pytest.raises(RuntimeError, match="not been fitted"):
+            model.savage_dickey_test()
 
 
 class TestPairedLaplaceFit:
@@ -142,6 +151,25 @@ class TestPairedLaplaceSavageDickey:
         result = fitted_model.savage_dickey_test()
         assert abs(result.BF_01 * result.BF_10 - 1.0) < 0.01
 
+    def test_strong_effect_rejects_h0(self) -> None:
+        """Large effect → BF₁₀ > 3 → 'Reject H0'."""
+        rng = np.random.default_rng(99)
+        y_a = rng.binomial(1, 0.95, size=200)
+        y_b = rng.binomial(1, 0.3, size=200)
+        m = PairedBayesPropTest(seed=99, n_samples=5000).fit(y_a, y_b)
+        bf = m.savage_dickey_test()
+        assert bf.BF_10 > 10
+        assert bf.decision == "Reject H0"
+
+    def test_no_effect_fails_to_reject(self) -> None:
+        """Equal rates → low BF₁₀ → 'Fail to reject H0'."""
+        rng = np.random.default_rng(99)
+        y_a = rng.binomial(1, 0.5, size=200)
+        y_b = rng.binomial(1, 0.5, size=200)
+        m = PairedBayesPropTest(seed=99, n_samples=5000).fit(y_a, y_b)
+        bf = m.savage_dickey_test()
+        assert bf.decision == "Fail to reject H0"
+
 
 class TestPairedLaplacePosteriorProbH0:
     """Tests for PairedBayesPropTest.posterior_probability_H0()."""
@@ -153,6 +181,20 @@ class TestPairedLaplacePosteriorProbH0:
     def test_equal_bf(self) -> None:
         result = PairedBayesPropTest.posterior_probability_H0(1.0, prior_H0=0.5)
         assert abs(result.p_H0 - 0.5) < 1e-6
+
+    def test_strong_evidence_for_h0(self) -> None:
+        result = PairedBayesPropTest.posterior_probability_H0(100.0, prior_H0=0.5)
+        assert result.p_H0 > 0.95
+        assert result.decision == "Fail to reject H0"
+
+    def test_strong_evidence_against_h0(self) -> None:
+        result = PairedBayesPropTest.posterior_probability_H0(0.01, prior_H0=0.5)
+        assert result.p_H1 > 0.95
+        assert result.decision == "Reject H0"
+
+    def test_undecided(self) -> None:
+        result = PairedBayesPropTest.posterior_probability_H0(1.0, prior_H0=0.5)
+        assert result.decision == "Undecided"
 
 
 class TestPairedLaplacePPC:

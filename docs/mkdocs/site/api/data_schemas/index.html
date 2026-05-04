@@ -456,6 +456,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../guide/decision_rules/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Decision Rules
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../guide/bfda/" class="md-nav__link">
         
   
@@ -787,6 +815,45 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#bayesAB.resources.data_schemas.ROPEResult" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ROPEResult
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="ROPEResult">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#bayesAB.resources.data_schemas.ROPEResult.from_samples" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        from_samples
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#bayesAB.resources.data_schemas.HypothesisDecision" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        HypothesisDecision
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -1095,6 +1162,45 @@
     <span class="md-ellipsis">
       
         MCMCDiagnostics
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#bayesAB.resources.data_schemas.ROPEResult" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ROPEResult
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="ROPEResult">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#bayesAB.resources.data_schemas.ROPEResult.from_samples" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        from_samples
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#bayesAB.resources.data_schemas.HypothesisDecision" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        HypothesisDecision
       
     </span>
   </a>
@@ -1759,6 +1865,321 @@ the paired Laplace model, and the paired Pólya-Gamma Gibbs model.</p>
 
 
         <p>MCMC diagnostics for all parameters.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h4 id="bayesAB.resources.data_schemas.ROPEResult" class="doc doc-heading">
+            <code>ROPEResult</code>
+
+
+<a href="#bayesAB.resources.data_schemas.ROPEResult" class="headerlink" title="Permanent link">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="pydantic.BaseModel">BaseModel</span></code></p>
+
+
+
+        <p>Result of a ROPE (Region of Practical Equivalence) analysis.</p>
+<p>Decision rules (Kruschke, 2018):</p>
+<ul>
+<li>95% CI entirely <strong>outside</strong> ROPE → Reject H₀</li>
+<li>95% CI entirely <strong>inside</strong> ROPE → Accept H₀</li>
+<li>95% CI <strong>overlaps</strong> ROPE → Undecided</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h5 id="bayesAB.resources.data_schemas.ROPEResult.from_samples" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">from_samples</span><span class="p">(</span><span class="n">samples</span><span class="p">,</span> <span class="n">rope</span><span class="o">=</span><span class="p">(</span><span class="o">-</span><span class="mf">0.02</span><span class="p">,</span> <span class="mf">0.02</span><span class="p">),</span> <span class="n">ci_mass</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-classmethod"><code>classmethod</code></small>
+  </span>
+
+<a href="#bayesAB.resources.data_schemas.ROPEResult.from_samples" class="headerlink" title="Permanent link">&para;</a></h5>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Compute ROPE decision from posterior samples.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>samples</code>
+            </td>
+            <td>
+                  <code><span title="numpy.typing.NDArray">NDArray</span>[<span title="numpy.floating">floating</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>1-D array of posterior draws for Δ (e.g. θ_A − θ_B).</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>rope</code>
+            </td>
+            <td>
+                  <code><span title="tuple">tuple</span>[<span title="float">float</span>, <span title="float">float</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>(lower, upper) bounds of the ROPE.</p>
+              </div>
+            </td>
+            <td>
+                  <code>(-0.02, 0.02)</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>ci_mass</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Credible interval mass (default 95%).</p>
+              </div>
+            </td>
+            <td>
+                  <code>0.95</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+<th>Name</th>          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+<td><code>Populated</code></td>            <td>
+                  <code><a class="autorefs autorefs-internal" title="ROPEResult (bayesAB.resources.data_schemas.ROPEResult)" href="#bayesAB.resources.data_schemas.ROPEResult">ROPEResult</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>class:<code>ROPEResult</code>.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>bayesAB/resources/data_schemas.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-199">199</a></span>
+<span class="normal"><a href="#__codelineno-0-200">200</a></span>
+<span class="normal"><a href="#__codelineno-0-201">201</a></span>
+<span class="normal"><a href="#__codelineno-0-202">202</a></span>
+<span class="normal"><a href="#__codelineno-0-203">203</a></span>
+<span class="normal"><a href="#__codelineno-0-204">204</a></span>
+<span class="normal"><a href="#__codelineno-0-205">205</a></span>
+<span class="normal"><a href="#__codelineno-0-206">206</a></span>
+<span class="normal"><a href="#__codelineno-0-207">207</a></span>
+<span class="normal"><a href="#__codelineno-0-208">208</a></span>
+<span class="normal"><a href="#__codelineno-0-209">209</a></span>
+<span class="normal"><a href="#__codelineno-0-210">210</a></span>
+<span class="normal"><a href="#__codelineno-0-211">211</a></span>
+<span class="normal"><a href="#__codelineno-0-212">212</a></span>
+<span class="normal"><a href="#__codelineno-0-213">213</a></span>
+<span class="normal"><a href="#__codelineno-0-214">214</a></span>
+<span class="normal"><a href="#__codelineno-0-215">215</a></span>
+<span class="normal"><a href="#__codelineno-0-216">216</a></span>
+<span class="normal"><a href="#__codelineno-0-217">217</a></span>
+<span class="normal"><a href="#__codelineno-0-218">218</a></span>
+<span class="normal"><a href="#__codelineno-0-219">219</a></span>
+<span class="normal"><a href="#__codelineno-0-220">220</a></span>
+<span class="normal"><a href="#__codelineno-0-221">221</a></span>
+<span class="normal"><a href="#__codelineno-0-222">222</a></span>
+<span class="normal"><a href="#__codelineno-0-223">223</a></span>
+<span class="normal"><a href="#__codelineno-0-224">224</a></span>
+<span class="normal"><a href="#__codelineno-0-225">225</a></span>
+<span class="normal"><a href="#__codelineno-0-226">226</a></span>
+<span class="normal"><a href="#__codelineno-0-227">227</a></span>
+<span class="normal"><a href="#__codelineno-0-228">228</a></span>
+<span class="normal"><a href="#__codelineno-0-229">229</a></span>
+<span class="normal"><a href="#__codelineno-0-230">230</a></span>
+<span class="normal"><a href="#__codelineno-0-231">231</a></span>
+<span class="normal"><a href="#__codelineno-0-232">232</a></span>
+<span class="normal"><a href="#__codelineno-0-233">233</a></span>
+<span class="normal"><a href="#__codelineno-0-234">234</a></span>
+<span class="normal"><a href="#__codelineno-0-235">235</a></span>
+<span class="normal"><a href="#__codelineno-0-236">236</a></span>
+<span class="normal"><a href="#__codelineno-0-237">237</a></span>
+<span class="normal"><a href="#__codelineno-0-238">238</a></span>
+<span class="normal"><a href="#__codelineno-0-239">239</a></span>
+<span class="normal"><a href="#__codelineno-0-240">240</a></span>
+<span class="normal"><a href="#__codelineno-0-241">241</a></span>
+<span class="normal"><a href="#__codelineno-0-242">242</a></span>
+<span class="normal"><a href="#__codelineno-0-243">243</a></span>
+<span class="normal"><a href="#__codelineno-0-244">244</a></span>
+<span class="normal"><a href="#__codelineno-0-245">245</a></span>
+<span class="normal"><a href="#__codelineno-0-246">246</a></span>
+<span class="normal"><a href="#__codelineno-0-247">247</a></span>
+<span class="normal"><a href="#__codelineno-0-248">248</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-199" name="__codelineno-0-199"></a><span class="nd">@classmethod</span>
+<a id="__codelineno-0-200" name="__codelineno-0-200"></a><span class="k">def</span><span class="w"> </span><span class="nf">from_samples</span><span class="p">(</span>
+<a id="__codelineno-0-201" name="__codelineno-0-201"></a>    <span class="bp">cls</span><span class="p">,</span>
+<a id="__codelineno-0-202" name="__codelineno-0-202"></a>    <span class="n">samples</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">floating</span><span class="p">],</span>
+<a id="__codelineno-0-203" name="__codelineno-0-203"></a>    <span class="n">rope</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="o">-</span><span class="mf">0.02</span><span class="p">,</span> <span class="mf">0.02</span><span class="p">),</span>
+<a id="__codelineno-0-204" name="__codelineno-0-204"></a>    <span class="n">ci_mass</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.95</span><span class="p">,</span>
+<a id="__codelineno-0-205" name="__codelineno-0-205"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ROPEResult</span><span class="p">:</span>
+<a id="__codelineno-0-206" name="__codelineno-0-206"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Compute ROPE decision from posterior samples.</span>
+<a id="__codelineno-0-207" name="__codelineno-0-207"></a>
+<a id="__codelineno-0-208" name="__codelineno-0-208"></a><span class="sd">    Args:</span>
+<a id="__codelineno-0-209" name="__codelineno-0-209"></a><span class="sd">        samples: 1-D array of posterior draws for Δ (e.g. θ_A − θ_B).</span>
+<a id="__codelineno-0-210" name="__codelineno-0-210"></a><span class="sd">        rope: (lower, upper) bounds of the ROPE.</span>
+<a id="__codelineno-0-211" name="__codelineno-0-211"></a><span class="sd">        ci_mass: Credible interval mass (default 95%).</span>
+<a id="__codelineno-0-212" name="__codelineno-0-212"></a>
+<a id="__codelineno-0-213" name="__codelineno-0-213"></a><span class="sd">    Returns:</span>
+<a id="__codelineno-0-214" name="__codelineno-0-214"></a><span class="sd">        Populated :class:`ROPEResult`.</span>
+<a id="__codelineno-0-215" name="__codelineno-0-215"></a><span class="sd">    &quot;&quot;&quot;</span>
+<a id="__codelineno-0-216" name="__codelineno-0-216"></a>    <span class="n">alpha</span> <span class="o">=</span> <span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="n">ci_mass</span><span class="p">)</span> <span class="o">/</span> <span class="mi">2</span>
+<a id="__codelineno-0-217" name="__codelineno-0-217"></a>    <span class="n">ci_lower</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">quantile</span><span class="p">(</span><span class="n">samples</span><span class="p">,</span> <span class="n">alpha</span><span class="p">))</span>
+<a id="__codelineno-0-218" name="__codelineno-0-218"></a>    <span class="n">ci_upper</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">quantile</span><span class="p">(</span><span class="n">samples</span><span class="p">,</span> <span class="mi">1</span> <span class="o">-</span> <span class="n">alpha</span><span class="p">))</span>
+<a id="__codelineno-0-219" name="__codelineno-0-219"></a>
+<a id="__codelineno-0-220" name="__codelineno-0-220"></a>    <span class="n">pct_in</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">((</span><span class="n">samples</span> <span class="o">&gt;=</span> <span class="n">rope</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">samples</span> <span class="o">&lt;=</span> <span class="n">rope</span><span class="p">[</span><span class="mi">1</span><span class="p">])))</span>
+<a id="__codelineno-0-221" name="__codelineno-0-221"></a>    <span class="n">pct_below</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">samples</span> <span class="o">&lt;</span> <span class="n">rope</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span>
+<a id="__codelineno-0-222" name="__codelineno-0-222"></a>    <span class="n">pct_above</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">samples</span> <span class="o">&gt;</span> <span class="n">rope</span><span class="p">[</span><span class="mi">1</span><span class="p">]))</span>
+<a id="__codelineno-0-223" name="__codelineno-0-223"></a>
+<a id="__codelineno-0-224" name="__codelineno-0-224"></a>    <span class="k">if</span> <span class="n">ci_lower</span> <span class="o">&gt;</span> <span class="n">rope</span><span class="p">[</span><span class="mi">1</span><span class="p">]:</span>
+<a id="__codelineno-0-225" name="__codelineno-0-225"></a>        <span class="n">decision</span> <span class="o">=</span> <span class="s2">&quot;Reject H0 — A practically better&quot;</span>
+<a id="__codelineno-0-226" name="__codelineno-0-226"></a>        <span class="n">interpretation</span> <span class="o">=</span> <span class="s2">&quot;95% CI entirely above ROPE — meaningful positive effect&quot;</span>
+<a id="__codelineno-0-227" name="__codelineno-0-227"></a>    <span class="k">elif</span> <span class="n">ci_upper</span> <span class="o">&lt;</span> <span class="n">rope</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span>
+<a id="__codelineno-0-228" name="__codelineno-0-228"></a>        <span class="n">decision</span> <span class="o">=</span> <span class="s2">&quot;Reject H0 — B practically better&quot;</span>
+<a id="__codelineno-0-229" name="__codelineno-0-229"></a>        <span class="n">interpretation</span> <span class="o">=</span> <span class="s2">&quot;95% CI entirely below ROPE — meaningful negative effect&quot;</span>
+<a id="__codelineno-0-230" name="__codelineno-0-230"></a>    <span class="k">elif</span> <span class="n">ci_lower</span> <span class="o">&gt;=</span> <span class="n">rope</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="ow">and</span> <span class="n">ci_upper</span> <span class="o">&lt;=</span> <span class="n">rope</span><span class="p">[</span><span class="mi">1</span><span class="p">]:</span>
+<a id="__codelineno-0-231" name="__codelineno-0-231"></a>        <span class="n">decision</span> <span class="o">=</span> <span class="s2">&quot;Accept H0 — practically equivalent&quot;</span>
+<a id="__codelineno-0-232" name="__codelineno-0-232"></a>        <span class="n">interpretation</span> <span class="o">=</span> <span class="s2">&quot;95% CI entirely inside ROPE — effect is negligible&quot;</span>
+<a id="__codelineno-0-233" name="__codelineno-0-233"></a>    <span class="k">else</span><span class="p">:</span>
+<a id="__codelineno-0-234" name="__codelineno-0-234"></a>        <span class="n">decision</span> <span class="o">=</span> <span class="s2">&quot;Undecided — CI overlaps ROPE&quot;</span>
+<a id="__codelineno-0-235" name="__codelineno-0-235"></a>        <span class="n">interpretation</span> <span class="o">=</span> <span class="s2">&quot;95% CI overlaps ROPE boundary — more data needed&quot;</span>
+<a id="__codelineno-0-236" name="__codelineno-0-236"></a>
+<a id="__codelineno-0-237" name="__codelineno-0-237"></a>    <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span>
+<a id="__codelineno-0-238" name="__codelineno-0-238"></a>        <span class="n">rope_lower</span><span class="o">=</span><span class="n">rope</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+<a id="__codelineno-0-239" name="__codelineno-0-239"></a>        <span class="n">rope_upper</span><span class="o">=</span><span class="n">rope</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span>
+<a id="__codelineno-0-240" name="__codelineno-0-240"></a>        <span class="n">ci_lower</span><span class="o">=</span><span class="n">ci_lower</span><span class="p">,</span>
+<a id="__codelineno-0-241" name="__codelineno-0-241"></a>        <span class="n">ci_upper</span><span class="o">=</span><span class="n">ci_upper</span><span class="p">,</span>
+<a id="__codelineno-0-242" name="__codelineno-0-242"></a>        <span class="n">ci_mass</span><span class="o">=</span><span class="n">ci_mass</span><span class="p">,</span>
+<a id="__codelineno-0-243" name="__codelineno-0-243"></a>        <span class="n">pct_in_rope</span><span class="o">=</span><span class="n">pct_in</span><span class="p">,</span>
+<a id="__codelineno-0-244" name="__codelineno-0-244"></a>        <span class="n">pct_below_rope</span><span class="o">=</span><span class="n">pct_below</span><span class="p">,</span>
+<a id="__codelineno-0-245" name="__codelineno-0-245"></a>        <span class="n">pct_above_rope</span><span class="o">=</span><span class="n">pct_above</span><span class="p">,</span>
+<a id="__codelineno-0-246" name="__codelineno-0-246"></a>        <span class="n">decision</span><span class="o">=</span><span class="n">decision</span><span class="p">,</span>
+<a id="__codelineno-0-247" name="__codelineno-0-247"></a>        <span class="n">interpretation</span><span class="o">=</span><span class="n">interpretation</span><span class="p">,</span>
+<a id="__codelineno-0-248" name="__codelineno-0-248"></a>    <span class="p">)</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h4 id="bayesAB.resources.data_schemas.HypothesisDecision" class="doc doc-heading">
+            <code>HypothesisDecision</code>
+
+
+<a href="#bayesAB.resources.data_schemas.HypothesisDecision" class="headerlink" title="Permanent link">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="pydantic.BaseModel">BaseModel</span></code></p>
+
+
+
+        <p>Composite hypothesis test result combining multiple decision frameworks.</p>
+<p>Depending on the chosen :attr:<code>rule</code>, one or more of the sub-results
+will be populated.</p>
 
 
 

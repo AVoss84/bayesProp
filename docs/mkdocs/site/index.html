@@ -545,6 +545,34 @@
   
   
     <li class="md-nav__item">
+      <a href="guide/decision_rules/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Decision Rules
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="guide/bfda/" class="md-nav__link">
         
   
@@ -899,23 +927,26 @@
 <li><strong>Non-paired Beta-Bernoulli model</strong> — conjugate posterior with exact Savage-Dickey Bayes factor via log-space convolution (no KDE)</li>
 <li><strong>Paired logistic model (Laplace)</strong> — fast MAP + Hessian approximation for paired binary data</li>
 <li><strong>Paired logistic model (Pólya-Gamma)</strong> — exact MCMC via Gibbs sampling with convergence diagnostics (R-hat, ESS)</li>
+<li><strong>Unified decision framework</strong> — <code>model.decide()</code> runs Bayes factor, posterior null probability, and ROPE analysis in a single call</li>
+<li><strong>ROPE analysis</strong> — Region of Practical Equivalence testing with automatic CI-based decisions (Kruschke, 2018)</li>
 <li><strong>Bayes Factor Design Analysis (BFDA)</strong> — Bayesian sample-size planning with power curves</li>
 <li><strong>Pydantic data contracts</strong> — typed, validated return values for all inference results</li>
 <li><strong>Publication-ready plots</strong> — posteriors, Savage-Dickey visualisation, forest plots, comparison tables</li>
 </ul>
 <h2 id="quick-example">Quick example<a class="headerlink" href="#quick-example" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">bayesAB.resources.bayes_nonpaired</span><span class="w"> </span><span class="kn">import</span> <span class="n">NonPairedBayesPropTest</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">bayesAB.resources.bayes_nonpaired</span><span class="w"> </span><span class="kn">import</span> <span class="n">NonPairedBayesPropTest</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">bayesAB.utils.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">simulate_nonpaired_scores</span>
 <a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>
-<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="n">rng</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">default_rng</span><span class="p">(</span><span class="mi">42</span><span class="p">)</span>
-<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="n">y_A</span> <span class="o">=</span> <span class="n">rng</span><span class="o">.</span><span class="n">binomial</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mf">0.85</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="mi">100</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">float</span><span class="p">)</span>
-<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="n">y_B</span> <span class="o">=</span> <span class="n">rng</span><span class="o">.</span><span class="n">binomial</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mf">0.70</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="mi">100</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">float</span><span class="p">)</span>
-<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>
-<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="n">model</span> <span class="o">=</span> <span class="n">NonPairedBayesPropTest</span><span class="p">(</span><span class="n">seed</span><span class="o">=</span><span class="mi">42</span><span class="p">)</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">y_A</span><span class="p">,</span> <span class="n">y_B</span><span class="p">)</span>
-<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="n">model</span><span class="o">.</span><span class="n">print_summary</span><span class="p">()</span>
-<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>
-<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="n">bf</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">savage_dickey_test</span><span class="p">()</span>
-<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;BF₁₀ = </span><span class="si">{</span><span class="n">bf</span><span class="o">.</span><span class="n">BF_10</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2">  →  </span><span class="si">{</span><span class="n">bf</span><span class="o">.</span><span class="n">decision</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="n">sim</span> <span class="o">=</span> <span class="n">simulate_nonpaired_scores</span><span class="p">(</span><span class="n">N</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="n">theta_A</span><span class="o">=</span><span class="mf">0.85</span><span class="p">,</span> <span class="n">theta_B</span><span class="o">=</span><span class="mf">0.70</span><span class="p">,</span> <span class="n">seed</span><span class="o">=</span><span class="mi">42</span><span class="p">)</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="n">y_A</span><span class="p">,</span> <span class="n">y_B</span> <span class="o">=</span> <span class="n">sim</span><span class="p">[</span><span class="s2">&quot;y_A&quot;</span><span class="p">],</span> <span class="n">sim</span><span class="p">[</span><span class="s2">&quot;y_B&quot;</span><span class="p">]</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="n">model</span> <span class="o">=</span> <span class="n">NonPairedBayesPropTest</span><span class="p">(</span><span class="n">seed</span><span class="o">=</span><span class="mi">42</span><span class="p">)</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">y_A</span><span class="p">,</span> <span class="n">y_B</span><span class="p">)</span>
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="n">model</span><span class="o">.</span><span class="n">print_summary</span><span class="p">()</span>
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="c1"># Unified decision (BF + P(H₀) + ROPE in one call)</span>
+<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="n">d</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">decide</span><span class="p">()</span>
+<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;BF₁₀ = </span><span class="si">{</span><span class="n">d</span><span class="o">.</span><span class="n">bayes_factor</span><span class="o">.</span><span class="n">BF_10</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2">  →  </span><span class="si">{</span><span class="n">d</span><span class="o">.</span><span class="n">bayes_factor</span><span class="o">.</span><span class="n">decision</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;ROPE: </span><span class="si">{</span><span class="n">d</span><span class="o">.</span><span class="n">rope</span><span class="o">.</span><span class="n">decision</span><span class="si">}</span><span class="s2">  (</span><span class="si">{</span><span class="n">d</span><span class="o">.</span><span class="n">rope</span><span class="o">.</span><span class="n">pct_in_rope</span><span class="si">:</span><span class="s2">.1%</span><span class="si">}</span><span class="s2"> in ROPE)&quot;</span><span class="p">)</span>
 </code></pre></div>
 <h2 id="models-at-a-glance">Models at a glance<a class="headerlink" href="#models-at-a-glance" title="Permanent link">&para;</a></h2>
 <table>
@@ -952,6 +983,7 @@
 <ul>
 <li><a href="getting_started/">Getting Started</a> — installation and first steps</li>
 <li><a href="guide/nonpaired/">User Guide</a> — detailed walkthroughs for each model</li>
+<li><a href="guide/decision_rules/">Decision Rules</a> — ROPE, Bayes factor, and the unified <code>decide()</code> API</li>
 <li><a href="api/">API Reference</a> — full module documentation</li>
 </ul>
 

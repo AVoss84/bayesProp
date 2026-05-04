@@ -493,17 +493,6 @@
   
 </li>
         
-          <li class="md-nav__item">
-  <a href="#directed-acyclic-graph-dag_1" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Directed Acyclic Graph (DAG)
-      
-    </span>
-  </a>
-  
-</li>
-        
       </ul>
     </nav>
   
@@ -588,6 +577,34 @@
     
   
     Paired Model (Pólya-Gamma)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../decision_rules/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Decision Rules
   
 
     
@@ -925,17 +942,6 @@
   
 </li>
         
-          <li class="md-nav__item">
-  <a href="#directed-acyclic-graph-dag_1" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Directed Acyclic Graph (DAG)
-      
-    </span>
-  </a>
-  
-</li>
-        
       </ul>
     </nav>
   
@@ -1054,28 +1060,6 @@ y_{B,i} \sim \text{Bernoulli}(\sigma(\mu))
     style yB fill:#fff9c4,stroke:#f9a825</code></pre>
 <p><small><strong>Legend:</strong> grey = hyperparameters, blue = latent parameters, green = deterministic,
 yellow = observed data.</small></p>
-<h3 id="directed-acyclic-graph-dag_1">Directed Acyclic Graph (DAG)<a class="headerlink" href="#directed-acyclic-graph-dag_1" title="Permanent link">&para;</a></h3>
-<pre class="mermaid"><code>graph TD
-    sigma_mu(["σ_μ"]) --&gt; mu["μ"]
-    sigma_delta(["σ_δ"]) --&gt; delta_A["δ_A"]
-
-    mu --&gt; pA["p_A = σ(μ + δ_A)"]
-    delta_A --&gt; pA
-    mu --&gt; pB["p_B = σ(μ)"]
-
-    pA --&gt; yA(["y_A,i"])
-    pB --&gt; yB(["y_B,i"])
-
-    style sigma_mu fill:#e0e0e0,stroke:#757575
-    style sigma_delta fill:#e0e0e0,stroke:#757575
-    style mu fill:#bbdefb,stroke:#1565c0
-    style delta_A fill:#bbdefb,stroke:#1565c0
-    style pA fill:#c8e6c9,stroke:#2e7d32
-    style pB fill:#c8e6c9,stroke:#2e7d32
-    style yA fill:#fff9c4,stroke:#f9a825
-    style yB fill:#fff9c4,stroke:#f9a825</code></pre>
-<p><small><strong>Legend:</strong> grey = hyperparameters, blue = latent parameters, green = deterministic,
-yellow = observed data.</small></p>
 <h2 id="when-to-use">When to use<a class="headerlink" href="#when-to-use" title="Permanent link">&para;</a></h2>
 <ul>
 <li><strong>Fast inference</strong> — no MCMC, results in milliseconds</li>
@@ -1102,17 +1086,25 @@ yellow = observed data.</small></p>
 <a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a><span class="n">bf</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">savage_dickey_test</span><span class="p">()</span>
 <a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;BF₁₀ = </span><span class="si">{</span><span class="n">bf</span><span class="o">.</span><span class="n">BF_10</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2">  →  </span><span class="si">{</span><span class="n">bf</span><span class="o">.</span><span class="n">decision</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 <a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a>
-<a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a><span class="c1"># Plots</span>
-<a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a><span class="n">model</span><span class="o">.</span><span class="n">plot_posterior_delta</span><span class="p">()</span>
-<a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a><span class="n">model</span><span class="o">.</span><span class="n">plot_savage_dickey</span><span class="p">()</span>
-<a id="__codelineno-0-21" name="__codelineno-0-21" href="#__codelineno-0-21"></a><span class="n">model</span><span class="o">.</span><span class="n">plot_laplace_posterior</span><span class="p">()</span>
+<a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a><span class="c1"># Unified decision (BF + P(H₀) + ROPE)</span>
+<a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a><span class="n">d</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">decide</span><span class="p">()</span>
+<a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;BF:   </span><span class="si">{</span><span class="n">d</span><span class="o">.</span><span class="n">bayes_factor</span><span class="o">.</span><span class="n">decision</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<a id="__codelineno-0-21" name="__codelineno-0-21" href="#__codelineno-0-21"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;P(H₀): </span><span class="si">{</span><span class="n">d</span><span class="o">.</span><span class="n">posterior_null</span><span class="o">.</span><span class="n">decision</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<a id="__codelineno-0-22" name="__codelineno-0-22" href="#__codelineno-0-22"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;ROPE: </span><span class="si">{</span><span class="n">d</span><span class="o">.</span><span class="n">rope</span><span class="o">.</span><span class="n">decision</span><span class="si">}</span><span class="s2">  (</span><span class="si">{</span><span class="n">d</span><span class="o">.</span><span class="n">rope</span><span class="o">.</span><span class="n">pct_in_rope</span><span class="si">:</span><span class="s2">.1%</span><span class="si">}</span><span class="s2"> in ROPE)&quot;</span><span class="p">)</span>
+<a id="__codelineno-0-23" name="__codelineno-0-23" href="#__codelineno-0-23"></a>
+<a id="__codelineno-0-24" name="__codelineno-0-24" href="#__codelineno-0-24"></a><span class="c1"># Plots</span>
+<a id="__codelineno-0-25" name="__codelineno-0-25" href="#__codelineno-0-25"></a><span class="n">model</span><span class="o">.</span><span class="n">plot_posterior_delta</span><span class="p">()</span>
+<a id="__codelineno-0-26" name="__codelineno-0-26" href="#__codelineno-0-26"></a><span class="n">model</span><span class="o">.</span><span class="n">plot_savage_dickey</span><span class="p">()</span>
+<a id="__codelineno-0-27" name="__codelineno-0-27" href="#__codelineno-0-27"></a><span class="n">model</span><span class="o">.</span><span class="n">plot_laplace_posterior</span><span class="p">()</span>
 </code></pre></div>
 <h2 id="simulating-paired-data">Simulating paired data<a class="headerlink" href="#simulating-paired-data" title="Permanent link">&para;</a></h2>
 <p>For testing and validation, generate synthetic paired data:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="n">sim</span> <span class="o">=</span> <span class="n">PairedBayesPropTest</span><span class="o">.</span><span class="n">simulate_paired_scores</span><span class="p">(</span>
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>    <span class="n">N</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span> <span class="n">delta_A</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">seed</span><span class="o">=</span><span class="mi">42</span>
-<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="p">)</span>
-<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="n">model</span> <span class="o">=</span> <span class="n">PairedBayesPropTest</span><span class="p">(</span><span class="n">seed</span><span class="o">=</span><span class="mi">42</span><span class="p">)</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">sim</span><span class="p">[</span><span class="s2">&quot;y_A&quot;</span><span class="p">],</span> <span class="n">sim</span><span class="p">[</span><span class="s2">&quot;y_B&quot;</span><span class="p">])</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">bayesAB.utils.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">simulate_paired_scores</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="n">sim</span> <span class="o">=</span> <span class="n">simulate_paired_scores</span><span class="p">(</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>    <span class="n">N</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span> <span class="n">delta_A</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">seed</span><span class="o">=</span><span class="mi">42</span>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="p">)</span>
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="n">model</span> <span class="o">=</span> <span class="n">PairedBayesPropTest</span><span class="p">(</span><span class="n">seed</span><span class="o">=</span><span class="mi">42</span><span class="p">)</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">sim</span><span class="p">[</span><span class="s2">&quot;y_A&quot;</span><span class="p">],</span> <span class="n">sim</span><span class="p">[</span><span class="s2">&quot;y_B&quot;</span><span class="p">])</span>
 </code></pre></div>
 <h2 id="prior-sensitivity-analysis">Prior sensitivity analysis<a class="headerlink" href="#prior-sensitivity-analysis" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">model</span><span class="o">.</span><span class="n">plot_sensitivity</span><span class="p">(</span><span class="n">prior_H0</span><span class="o">=</span><span class="mf">0.5</span><span class="p">)</span>

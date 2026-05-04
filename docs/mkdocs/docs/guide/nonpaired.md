@@ -64,6 +64,16 @@ print(f"P(A > B): {model.summary.p_A_greater_B:.4f}")
 bf = model.savage_dickey_test()
 print(f"BF₁₀ = {bf.BF_10:.2f}  →  {bf.decision}")
 
+# ROPE analysis
+rope = model.rope_test()
+print(f"ROPE: {rope.decision}  ({rope.pct_in_rope:.1%} in ROPE)")
+
+# Or use the unified decide() for all three frameworks at once
+d = model.decide()
+print(f"BF: {d.bayes_factor.decision}")
+print(f"P(H₀): {d.posterior_null.decision}")
+print(f"ROPE: {d.rope.decision}")
+
 # Posterior predictive checks
 ppc = model.ppc_pvalues(seed=42)
 for stat_name, stat in ppc.items():

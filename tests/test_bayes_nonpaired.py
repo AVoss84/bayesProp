@@ -106,6 +106,16 @@ class TestNonPairedInit:
         assert model.threshold == 0.8
         assert model.n_samples == 5000
 
+    def test_verbose_init(self, capsys: pytest.CaptureFixture[str]) -> None:
+        NonPairedBayesPropTest(verbose=True)
+        captured = capsys.readouterr()
+        assert "Initialized" in captured.out
+
+    def test_check_fitted_raises(self) -> None:
+        model = NonPairedBayesPropTest()
+        with pytest.raises(RuntimeError, match="not been fitted"):
+            model.savage_dickey_test()
+
 
 class TestNonPairedTest:
     """Tests for NonPairedBayesPropTest.test()."""
@@ -139,6 +149,22 @@ class TestNonPairedFit:
         model = NonPairedBayesPropTest(seed=42, n_samples=5000)
         result = model.fit(y_a, y_b)
         assert result is model
+
+    def test_binarize_continuous_scores(self) -> None:
+        """Non-binary inputs should be binarized at threshold."""
+        scores_a = np.array([0.9, 0.8, 0.3, 0.6, 0.75])
+        scores_b = np.array([0.4, 0.7, 0.2, 0.5, 0.85])
+        model = NonPairedBayesPropTest(threshold=0.7, seed=42, n_samples=1000).fit(scores_a, scores_b)
+        assert model.summary is not None
+
+    def test_binarize_verbose(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """verbose=True should log when binarizing."""
+        scores = np.array([0.9, 0.3, 0.7, 0.5])
+        binary = np.array([1.0, 0.0, 1.0, 0.0])
+        model = NonPairedBayesPropTest(threshold=0.7, seed=42, n_samples=1000, verbose=True)
+        model.fit(scores, binary)
+        captured = capsys.readouterr()
+        assert "binarizing" in captured.out.lower()
 
     def test_summary_is_nonpaired_summary(self, fitted_model: NonPairedBayesPropTest) -> None:
         assert isinstance(fitted_model.summary, NonPairedSummary)
@@ -179,6 +205,25 @@ class TestNonPairedSavageDickey:
         result = fitted_model.savage_dickey_test()
         assert len(result.interpretation) > 0
         assert len(result.decision) > 0
+
+    def test_strong_effect_rejects_h0(self) -> None:
+        """Large effect → high BF₁₀ → 'Reject H0'."""
+        rng = np.random.default_rng(99)
+        y_a = rng.binomial(1, 0.95, size=200).astype(float)
+        y_b = rng.binomial(1, 0.3, size=200).astype(float)
+        m = NonPairedBayesPropTest(seed=99, n_samples=10_000).fit(y_a, y_b)
+        bf = m.savage_dickey_test()
+        assert bf.BF_10 > 10
+        assert bf.decision == "Reject H0"
+
+    def test_no_effect_fails_to_reject(self) -> None:
+        """Equal rates → low BF₁₀ → 'Fail to reject H0'."""
+        rng = np.random.default_rng(99)
+        y_a = rng.binomial(1, 0.5, size=200).astype(float)
+        y_b = rng.binomial(1, 0.5, size=200).astype(float)
+        m = NonPairedBayesPropTest(seed=99, n_samples=10_000).fit(y_a, y_b)
+        bf = m.savage_dickey_test()
+        assert bf.decision == "Fail to reject H0"
 
 
 class TestNonPairedPosteriorProbH0:

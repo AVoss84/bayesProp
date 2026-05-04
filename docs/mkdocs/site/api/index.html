@@ -456,6 +456,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../guide/decision_rules/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Decision Rules
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../guide/bfda/" class="md-nav__link">
         
   
@@ -609,6 +637,17 @@
     <span class="md-ellipsis">
       
         Modules
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#shared-decision-rule-interface" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Shared decision-rule interface
       
     </span>
   </a>
@@ -808,6 +847,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#shared-decision-rule-interface" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Shared decision-rule interface
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -829,7 +879,7 @@
 
 
 <h1 id="api-reference">API Reference<a class="headerlink" href="#api-reference" title="Permanent link">&para;</a></h1>
-<p>Full API documentation for all <code>bayesAB.resources</code> modules, auto-generated
+<p>Full API documentation for all <code>bayesAB</code> modules, auto-generated
 from source code docstrings.</p>
 <h2 id="modules">Modules<a class="headerlink" href="#modules" title="Permanent link">&para;</a></h2>
 <table>
@@ -842,7 +892,7 @@ from source code docstrings.</p>
 <tbody>
 <tr>
 <td><a href="data_schemas/">Data Schemas</a></td>
-<td>Pydantic data contracts (return types, configs)</td>
+<td>Pydantic data contracts — <code>HypothesisDecision</code>, <code>ROPEResult</code>, <code>SavageDickeyResult</code>, configs</td>
 </tr>
 <tr>
 <td><a href="bayes_nonpaired/">Non-Paired Model</a></td>
@@ -858,7 +908,40 @@ from source code docstrings.</p>
 </tr>
 <tr>
 <td><a href="bfda_utils/">Utilities</a></td>
-<td>Bayes Factor Design Analysis, simulation &amp; sample-size planning</td>
+<td>BFDA, simulation &amp; sample-size planning</td>
+</tr>
+</tbody>
+</table>
+<h2 id="shared-decision-rule-interface">Shared decision-rule interface<a class="headerlink" href="#shared-decision-rule-interface" title="Permanent link">&para;</a></h2>
+<p>All three model classes expose the same methods for hypothesis testing:</p>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Return type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>model.decide()</code></td>
+<td><code>HypothesisDecision</code></td>
+<td>Run BF + P(H₀) + ROPE in a single call</td>
+</tr>
+<tr>
+<td><code>model.savage_dickey_test()</code></td>
+<td><code>SavageDickeyResult</code></td>
+<td>Savage-Dickey Bayes factor</td>
+</tr>
+<tr>
+<td><code>model.posterior_probability_H0()</code></td>
+<td><code>PosteriorProbH0Result</code></td>
+<td>Posterior null probability</td>
+</tr>
+<tr>
+<td><code>model.rope_test()</code></td>
+<td><code>ROPEResult</code></td>
+<td>ROPE analysis</td>
 </tr>
 </tbody>
 </table>
