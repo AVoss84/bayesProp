@@ -1,6 +1,9 @@
 # bayesAB — Bayesian A/B Testing for Proportions
 
 [![Documentation](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://avoss84.github.io/bayesAB/)
+[![Python](https://img.shields.io/badge/python-%E2%89%A53.13-blue?logo=python&logoColor=white)](https://www.python.org/)
+[![Tests](https://github.com/AVoss84/bayesAB/actions/workflows/tests.yml/badge.svg)](https://github.com/AVoss84/bayesAB/actions/workflows/tests.yml)
+[![codecov](https://codecov.io/gh/AVoss84/bayesAB/branch/main/graph/badge.svg)](https://codecov.io/gh/AVoss84/bayesAB)
 
 A Python package for **Bayesian hypothesis testing** of binary (pass/fail) outcomes in A/B experiments.
 It provides three complementary models, Savage–Dickey Bayes factors, posterior predictive checks,
