@@ -408,3 +408,77 @@ class TestDescriptiveSummary:
         df = descriptive_summary(scores_data, thresholds=[0.5, 0.7])
         assert isinstance(df, pd.DataFrame)
         assert len(df) > 0
+
+
+# ── DGP recovery tests ───────────────────────────────────────
+
+
+class TestNonPairedDGPRecovery:
+    """Verify that posterior estimates recover the true DGP parameters.
+
+    These tests simulate data from known parameters, fit the model, and
+    check that the posterior 95% CI covers the true value and the point
+    estimate is close.
+    """
+
+    @pytest.mark.parametrize(
+        ("theta_A", "theta_B", "N"),
+        [
+            (0.80, 0.60, 200),
+            (0.70, 0.70, 300),  # null effect
+            (0.90, 0.50, 150),  # large effect
+        ],
+    )
+    def test_true_delta_in_ci(self, theta_A: float, theta_B: float, N: int) -> None:
+        """True Δ = θ_A − θ_B should fall inside the 95% CI."""
+        from bayesAB.utils.utils import simulate_nonpaired_scores
+
+        sim = simulate_nonpaired_scores(N=N, theta_A=theta_A, theta_B=theta_B, seed=42)
+        model = NonPairedBayesPropTest(seed=42, n_samples=50_000).fit(sim.y_A, sim.y_B)
+
+        true_delta = theta_A - theta_B
+        ci = model.summary.ci_95
+        assert ci.lower <= true_delta <= ci.upper, (
+            f"True Δ={true_delta:.3f} not in 95% CI [{ci.lower:.3f}, {ci.upper:.3f}]"
+        )
+
+    def test_theta_posteriors_cover_truth(self) -> None:
+        """Individual θ_A and θ_B posterior means should be close to truth."""
+        from bayesAB.utils.utils import simulate_nonpaired_scores
+
+        theta_A, theta_B = 0.80, 0.55
+        sim = simulate_nonpaired_scores(N=300, theta_A=theta_A, theta_B=theta_B, seed=7)
+        model = NonPairedBayesPropTest(seed=7, n_samples=50_000).fit(sim.y_A, sim.y_B)
+
+        assert abs(model.summary.theta_A_mean - theta_A) < 0.08
+        assert abs(model.summary.theta_B_mean - theta_B) < 0.08
+
+    def test_null_effect_not_rejected(self) -> None:
+        """Under H₀ (θ_A = θ_B), BF should not reject."""
+        from bayesAB.utils.utils import simulate_nonpaired_scores
+
+        sim = simulate_nonpaired_scores(N=200, theta_A=0.65, theta_B=0.65, seed=42)
+        model = NonPairedBayesPropTest(seed=42, n_samples=50_000).fit(sim.y_A, sim.y_B)
+        bf = model.savage_dickey_test()
+        assert bf.decision == "Fail to reject H0"
+
+    def test_large_effect_rejected(self) -> None:
+        """With a large true effect (Δ=0.35), BF should reject H₀."""
+        from bayesAB.utils.utils import simulate_nonpaired_scores
+
+        sim = simulate_nonpaired_scores(N=200, theta_A=0.85, theta_B=0.50, seed=42)
+        model = NonPairedBayesPropTest(seed=42, n_samples=50_000).fit(sim.y_A, sim.y_B)
+        bf = model.savage_dickey_test()
+        assert bf.BF_10 > 10
+        assert bf.decision == "Reject H0"
+
+    def test_mean_delta_close_to_truth(self) -> None:
+        """Posterior mean Δ should be within 0.08 of the true value."""
+        from bayesAB.utils.utils import simulate_nonpaired_scores
+
+        theta_A, theta_B = 0.75, 0.60
+        sim = simulate_nonpaired_scores(N=300, theta_A=theta_A, theta_B=theta_B, seed=99)
+        model = NonPairedBayesPropTest(seed=99, n_samples=50_000).fit(sim.y_A, sim.y_B)
+
+        true_delta = theta_A - theta_B
+        assert abs(model.summary.mean_delta - true_delta) < 0.08

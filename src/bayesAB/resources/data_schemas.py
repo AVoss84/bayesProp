@@ -100,9 +100,14 @@ class PairedTrueParams(BaseModel):
     """True parameters used to generate paired simulation data."""
 
     N: int = Field(..., gt=0, description="Number of paired observations.")
-    sigma_theta: float = Field(..., ge=0, description="SD of the latent item ability.")
-    delta_A: float = Field(..., description="Logit-scale offset for model A.")
-    delta_B: float = Field(..., description="Logit-scale offset for model B.")
+    mu: float = Field(default=0.0, description="Shared logit-scale intercept.")
+    sigma_theta: float = Field(
+        default=0.0,
+        ge=0,
+        description="SD of the latent item ability (0 = fixed effects).",
+    )
+    delta_A: float = Field(..., description="Logit-scale treatment effect for model A.")
+    delta_B: float = Field(default=0.0, description="Logit-scale offset for model B (0 by default).")
 
 
 class PairedSimResult(BaseModel):

@@ -302,3 +302,94 @@ class TestPairedLaplaceStatic:
         PairedBayesPropTest.print_comparison_table(results)
         captured = capsys.readouterr()
         assert "metric1" in captured.out
+
+
+# ── DGP recovery tests ───────────────────────────────────────
+
+
+class TestPairedLaplaceDGPRecovery:
+    """Verify that Laplace posterior estimates recover the true DGP parameters.
+
+    The Laplace model is a fixed-effects logistic regression:
+        y_A ~ Bern(σ(μ + δ_A)),  y_B ~ Bern(σ(μ)).
+    We use :func:`simulate_paired_scores` (which now defaults to
+    ``sigma_theta=0``, matching the model) for parameter recovery tests.
+
+    For decision-rule tests (BF) we pass ``sigma_theta > 0`` to add
+    random effects — those tests verify directional correctness rather
+    than point-estimate recovery.
+    """
+
+    @pytest.mark.parametrize(
+        ("mu", "delta_A", "N"),
+        [
+            (0.0, 0.5, 500),
+            (0.0, 1.0, 400),  # larger effect
+            (0.0, 0.0, 500),  # null effect
+            (0.5, 0.8, 500),  # non-zero intercept
+        ],
+    )
+    def test_delta_A_posterior_covers_truth(self, mu: float, delta_A: float, N: int) -> None:
+        """Logit-scale δ_A posterior samples should cover the true value (95% CI)."""
+        from bayesAB.utils.utils import simulate_paired_scores
+
+        sim = simulate_paired_scores(N=N, mu=mu, delta_A=delta_A, seed=42)
+        model = PairedBayesPropTest(seed=42, n_samples=10_000).fit(sim.y_A, sim.y_B)
+
+        # CI on the logit-scale δ_A
+        lo = float(np.quantile(model.delta_A_samples, 0.025))
+        hi = float(np.quantile(model.delta_A_samples, 0.975))
+        assert lo <= delta_A <= hi, f"True δ_A={delta_A:.3f} not in 95% CI [{lo:.3f}, {hi:.3f}]"
+
+    def test_mean_delta_A_close_to_truth(self) -> None:
+        """Posterior mean of logit-scale δ_A should be close to the true value."""
+        from bayesAB.utils.utils import simulate_paired_scores
+
+        delta_A = 0.6
+        sim = simulate_paired_scores(N=500, delta_A=delta_A, seed=99)
+        model = PairedBayesPropTest(seed=99, n_samples=10_000).fit(sim.y_A, sim.y_B)
+
+        assert abs(model.summary.delta_A_posterior_mean - delta_A) < 0.25
+
+    def test_prob_delta_covers_truth(self) -> None:
+        """Probability-scale Δ should cover the true value derived from the DGP."""
+        from bayesAB.utils.utils import simulate_paired_scores
+
+        mu, delta_A = 0.0, 0.5
+        true_delta_prob = sigmoid(mu + delta_A) - sigmoid(mu)
+
+        sim = simulate_paired_scores(N=500, mu=mu, delta_A=delta_A, seed=42)
+        model = PairedBayesPropTest(seed=42, n_samples=10_000).fit(sim.y_A, sim.y_B)
+
+        ci = model.summary.ci_95
+        assert ci.lower <= true_delta_prob <= ci.upper
+
+    def test_null_effect_not_rejected(self) -> None:
+        """Under H₀ (δ_A = 0), BF should not reject."""
+        from bayesAB.utils.utils import simulate_paired_scores
+
+        sim = simulate_paired_scores(N=300, delta_A=0.0, sigma_theta=2.0, seed=42)
+        model = PairedBayesPropTest(seed=42, n_samples=10_000).fit(sim.y_A, sim.y_B)
+        bf = model.savage_dickey_test()
+        assert bf.decision == "Fail to reject H0"
+
+    def test_large_effect_rejected(self) -> None:
+        """With a large true effect (δ_A=1.5), BF should reject H₀."""
+        from bayesAB.utils.utils import simulate_paired_scores
+
+        sim = simulate_paired_scores(N=300, delta_A=1.5, sigma_theta=2.0, seed=42)
+        model = PairedBayesPropTest(seed=42, n_samples=10_000).fit(sim.y_A, sim.y_B)
+        bf = model.savage_dickey_test()
+        assert bf.BF_10 > 10
+        assert bf.decision == "Reject H0"
+
+    def test_map_estimate_recovers_delta(self) -> None:
+        """Laplace MAP estimate for δ_A should be close to the true value."""
+        from bayesAB.utils.utils import simulate_paired_scores
+
+        delta_A = 0.8
+        sim = simulate_paired_scores(N=500, delta_A=delta_A, seed=7)
+        model = PairedBayesPropTest(seed=7, n_samples=10_000).fit(sim.y_A, sim.y_B)
+
+        map_delta = model.laplace["map"][1]  # index 1 is delta_A
+        assert abs(map_delta - delta_A) < 0.25

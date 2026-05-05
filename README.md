@@ -1,5 +1,6 @@
 # Bayesian A/B Testing for Proportions
 
+[![PyPI](https://img.shields.io/pypi/v/bayesAB?logo=pypi&logoColor=white)](https://pypi.org/project/bayesAB/)
 [![Documentation](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://avoss84.github.io/bayesAB/)
 [![Python](https://img.shields.io/badge/python-%E2%89%A53.13-blue?logo=python&logoColor=white)](https://www.python.org/)
 [![Tests](https://github.com/AVoss84/bayesAB/actions/workflows/tests.yml/badge.svg)](https://github.com/AVoss84/bayesAB/actions/workflows/tests.yml)
@@ -81,37 +82,24 @@ model.plot_savage_dickey()
 ## Installation
 
 ```bash
-# curl -LsSf https://astral.sh/uv/install.sh | sh   # optional: install uv
+pip install bayesAB
+```
+
+Or with [uv](https://github.com/astral-sh/uv):
+
+```bash
+uv pip install bayesAB
+```
+
+For development (from source):
+
+```bash
+git clone https://github.com/AVoss84/bayesAB.git
+cd bayesAB
 uv venv --python 3.13
 uv sync
 source .venv/bin/activate
 ```
-
-## Development
-
-The project uses [just](https://github.com/casey/just) as a task runner and [pre-commit](https://pre-commit.com/) hooks (ruff format + ruff lint).
-
-```bash
-just test            # run pytest
-just test-cov        # pytest with coverage
-just format          # ruff format + fix
-just lint            # format + mypy
-just docs-serve      # local MkDocs preview
-just pre-commit-all  # run all pre-commit hooks
-```
-
-## Documentation
-
-Serve the MkDocs site locally:
-
-```bash
-just docs-serve      # http://127.0.0.1:8000
-```
-
-Mathematical derivations are available in `docs/`:
-- [Beta–Beta posterior inference](docs/beta_beta_posterior_inference.md)
-- [Hierarchical Beta regression model](docs/hierarchical_beta_regression_model.md)
-- [Hierarchical logistic–normal model](docs/hierarchical_logistic_normal_model.md)
 
 ## Dependencies
 
@@ -122,6 +110,8 @@ Mathematical derivations are available in `docs/`:
 
 ## References
 
+- Gelman, A., Carlin, J. B., Stern, H. S., Dunson, D. B., Vehtari, A. & Rubin, D. B. (2013). *Bayesian Data Analysis* (3rd ed.). Chapman & Hall/CRC.
+- Kruschke, J. K. (2018). Rejecting or accepting parameter values in Bayesian estimation. *Advances in Methods and Practices in Psychological Science*, 1(2), 270–280.
 - Polson, N. G., Scott, J. G. & Windle, J. (2013). Bayesian inference for logistic models using Pólya–Gamma latent variables. *JASA*, 108(504), 1339–1349.
 - Schönbrodt, F. D. & Wagenmakers, E.-J. (2018). Bayes factor design analysis: Planning for compelling evidence. *Psychonomic Bulletin & Review*, 25(1), 128–142.
 

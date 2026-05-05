@@ -3,13 +3,13 @@
 ## Overview
 
 BFDA is the Bayesian analog of frequentist power analysis. Given a
-hypothesised true effect \\(\Delta = \theta_A - \theta_B\\), it estimates
-the probability of obtaining **decisive** evidence (e.g. \\(BF_{10} > 3\\))
+hypothesised true effect $\Delta = \theta_A - \theta_B$, it estimates
+the probability of obtaining **decisive** evidence (e.g. $BF_{10} > 3$)
 at each sample size via simulation.
 
-\\[
+$$
 \text{Bayesian Power}(n) = P\!\left(BF_{10} > \text{threshold} \;\middle|\; \theta_A, \theta_B, n\right)
-\\]
+$$
 
 ## Non-paired design
 
@@ -74,7 +74,7 @@ plot_bfda_sensitivity(
 
 ## P(H₀) formulation
 
-Instead of a BF threshold, you can use \\(P(H_0 \mid \text{data}) < \alpha\\)
+Instead of a BF threshold, you can use $P(H_0 \mid \text{data}) < \alpha$
 as the decisiveness criterion:
 
 ```python

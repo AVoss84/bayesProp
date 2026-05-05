@@ -59,23 +59,29 @@ def simulate_nonpaired_scores(
 
 def simulate_paired_scores(
     N: int = 200,
-    sigma_theta: float = 2.0,
+    mu: float = 0.0,
     delta_A: float = 0.5,
     delta_B: float = 0.0,
+    sigma_theta: float = 0.0,
     seed: int = 0,
     rng: np.random.Generator | None = None,
 ) -> PairedSimResult:
-    """Simulate paired binary outcomes from a logistic random-effects DGP.
+    """Simulate paired binary outcomes from a logistic DGP.
 
-    Each item *i* has a latent ability ``theta_i ~ N(0, sigma_theta)``.
-    The success probabilities are ``sigmoid(theta_i + delta_A)`` and
-    ``sigmoid(theta_i + delta_B)`` for models A and B respectively.
+    Matches the paired model: ``y_A ~ Bern(σ(μ + δ_A))``,
+    ``y_B ~ Bern(σ(μ))``.
+
+    When ``sigma_theta > 0`` each item *i* additionally receives a
+    random effect ``ε_i ~ N(0, sigma_theta)`` so that
+    ``θ_i = μ + ε_i`` (useful for more realistic BFDA simulations).
 
     Args:
         N: Number of paired observations.
-        sigma_theta: Standard deviation of the latent item ability.
-        delta_A: Logit-scale offset for model A.
-        delta_B: Logit-scale offset for model B.
+        mu: Shared logit-scale intercept.
+        delta_A: Logit-scale treatment effect for model A.
+        delta_B: Logit-scale offset for model B (0 by default).
+        sigma_theta: SD of optional per-item random effects
+            (``0`` = fixed effects matching the model).
         seed: Random seed for reproducibility.
         rng: Optional pre-seeded RNG; if provided, *seed* is ignored.
 
@@ -85,7 +91,7 @@ def simulate_paired_scores(
     """
     if rng is None:
         rng = np.random.default_rng(seed)
-    theta_true = rng.normal(0.0, sigma_theta, size=N)
+    theta_true = mu + rng.normal(0.0, sigma_theta, size=N)
     p_A = _sigmoid(theta_true + delta_A)
     p_B = _sigmoid(theta_true + delta_B)
     y_A = rng.binomial(1, p_A)
@@ -96,7 +102,7 @@ def simulate_paired_scores(
         p_A_true=p_A,
         p_B_true=p_B,
         theta_true=theta_true,
-        true_params=PairedTrueParams(N=N, sigma_theta=sigma_theta, delta_A=delta_A, delta_B=delta_B),
+        true_params=PairedTrueParams(N=N, mu=mu, sigma_theta=sigma_theta, delta_A=delta_A, delta_B=delta_B),
     )
 
 
@@ -164,13 +170,14 @@ def _make_nonpaired_generator(
 def _make_paired_generator(
     theta_A_true: float,
     theta_B_true: float,
-    sigma_theta: float = 2.0,
+    sigma_theta: float = 0.0,
 ) -> Callable[[np.random.Generator, int], tuple[np.ndarray, np.ndarray]]:
     """Create a data generator for paired Bernoulli observations.
 
-    Delegates to :func:`simulate_paired_scores` using a logistic
-    random-effects DGP.  ``theta_A_true`` / ``theta_B_true`` are
-    converted to logit-scale offsets internally.
+    Delegates to :func:`simulate_paired_scores`.  ``theta_A_true`` /
+    ``theta_B_true`` are converted to the model's ``(mu, delta_A)``
+    parameterisation: ``mu = logit(theta_B_true)`` and
+    ``delta_A = logit(theta_A_true) - logit(theta_B_true)``.
 
     Note:
         Due to Jensen's inequality the realised marginal rates will
@@ -179,14 +186,14 @@ def _make_paired_generator(
     Args:
         theta_A_true: Target marginal success rate for model A.
         theta_B_true: Target marginal success rate for model B.
-        sigma_theta: SD of the shared latent item effect (controls
-            within-pair correlation).  ``0`` recovers independent data.
+        sigma_theta: SD of optional per-item random effects
+            (``0`` = fixed effects matching the model).
     """
-    delta_A = np.log(theta_A_true / (1.0 - theta_A_true))
-    delta_B = np.log(theta_B_true / (1.0 - theta_B_true))
+    mu = np.log(theta_B_true / (1.0 - theta_B_true))  # logit(p_B)
+    delta_A = np.log(theta_A_true / (1.0 - theta_A_true)) - mu  # logit(p_A) - logit(p_B)
 
     def generator(rng: np.random.Generator, n: int) -> tuple[np.ndarray, np.ndarray]:
-        sim = simulate_paired_scores(N=n, sigma_theta=sigma_theta, delta_A=delta_A, delta_B=delta_B, rng=rng)
+        sim = simulate_paired_scores(N=n, mu=mu, delta_A=delta_A, sigma_theta=sigma_theta, rng=rng)
         return sim.y_A, sim.y_B
 
     return generator

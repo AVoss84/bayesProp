@@ -2,11 +2,21 @@
 
 ## Installation
 
-Clone the repository and install with [uv](https://docs.astral.sh/uv/):
+```bash
+pip install bayesAB
+```
+
+Or with [uv](https://github.com/astral-sh/uv):
 
 ```bash
-git clone https://github.com/AVoss84/bayesianAB.git
-cd bayesianAB
+uv pip install bayesAB
+```
+
+For development (from source):
+
+```bash
+git clone https://github.com/AVoss84/bayesAB.git
+cd bayesAB
 uv venv --python 3.13
 uv sync
 source .venv/bin/activate
