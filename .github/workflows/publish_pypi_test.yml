@@ -2,9 +2,6 @@ name: Publish to Test PyPI
 
 on:
   workflow_dispatch:
-  # push:
-  #   tags:
-  #     - "test-0.*"
 
 jobs:
   build-and-upload:
@@ -12,37 +9,27 @@ jobs:
 
     steps:
       - name: Check out code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.13"
 
-      - name: Install build & twine
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install build twine pytest
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
 
-      # (A) Install your package in editable mode with dev extras
-      - name: Install package + dev extras
-        run: |
-          python -m pip install -e ".[dev]"
+      - name: Install dependencies
+        run: uv sync --group test
 
-      # (B) Run your tests
       - name: Run tests
-        run: |
-          python -m pytest --verbose
+        run: uv run pytest --verbose
 
-      # (C) Build the package
       - name: Build the package
-        run: python -m build
+        run: uv build
 
-      # (D) Upload to Test PyPI (only if tests passed)
       - name: Upload to Test PyPI
         if: success()
-        run: |
-          twine upload --repository testpypi dist/*
+        run: uv publish --index-url https://test.pypi.org/legacy/
         env:
-          TWINE_USERNAME: "__token__"
-          TWINE_PASSWORD: ${{ secrets.TEST_PYPI_API_TOKEN }}
+          UV_PUBLISH_TOKEN: ${{ secrets.TEST_PYPI_API_TOKEN }}

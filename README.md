@@ -1,4 +1,4 @@
-# bayesAB — Bayesian A/B Testing for Proportions
+# Bayesian A/B Testing for Proportions
 
 [![Documentation](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://avoss84.github.io/bayesAB/)
 [![Python](https://img.shields.io/badge/python-%E2%89%A53.13-blue?logo=python&logoColor=white)](https://www.python.org/)
