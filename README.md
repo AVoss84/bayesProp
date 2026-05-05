@@ -5,6 +5,7 @@
 A Python package for **Bayesian hypothesis testing** of binary (pass/fail) outcomes in A/B experiments.
 It provides three complementary models, Savage–Dickey Bayes factors, posterior predictive checks,
 Bayes Factor Design Analysis (BFDA) for sample-size planning, and publication-ready plots.
+Please check out our [Getting Started](https://avoss84.github.io/bayesAB/getting_started/) guide for installation and quick examples.
 
 ## Models
 
