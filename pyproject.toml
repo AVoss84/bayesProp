@@ -23,6 +23,12 @@ authors = [
     { name = "Alexander Vosseler", email = "avosseler@nemetschek.com" }
 ]
 
+[project.urls]
+Homepage = "https://github.com/AVoss84/bayesAB"
+Documentation = "https://avoss84.github.io/bayesAB/"
+Repository = "https://github.com/AVoss84/bayesAB"
+Issues = "https://github.com/AVoss84/bayesAB/issues"
+
 [dependency-groups]
 dev = [
     {include-group = "format"},
