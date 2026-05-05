@@ -1,17 +1,17 @@
 # bayesprop
 
-**Bayesian A/B testing for proportions** — a Python package for comparing two models (or treatments) using binarized pass/fail scores with fully Bayesian inference, Bayes factor hypothesis testing, and sample-size planning.
+**Bayesian A/B testing for proportions** — a Python package for **Bayesian hypothesis testing** of binary (pass/fail) outcomes in A/B experiments
+using analytic and approximate inference methods —
+particularly relevant when comparing features in **software engineering** or evaluating model changes in **AI/MLOps** pipelines.
 
 ## Features
 
-- **Non-paired Beta-Bernoulli model** — conjugate posterior with exact Savage-Dickey Bayes factor via log-space convolution (no KDE)
-- **Paired logistic model (Laplace)** — fast MAP + Hessian approximation for paired binary data
-- **Paired logistic model (Pólya-Gamma)** — exact MCMC via Gibbs sampling with convergence diagnostics (R-hat, ESS)
-- **Unified decision framework** — `model.decide()` runs Bayes factor, posterior null probability, and ROPE analysis in a single call
-- **ROPE analysis** — Region of Practical Equivalence testing with automatic CI-based decisions (Kruschke, 2018)
-- **Bayes Factor Design Analysis (BFDA)** — Bayesian sample-size planning with power curves
-- **Pydantic data contracts** — typed, validated return values for all inference results
-- **Publication-ready plots** — posteriors, Savage-Dickey visualisation, forest plots, comparison tables
+- **Effect-size inference for proportions** — estimate and test the difference in success rates for both **paired** and **non-paired** samples
+- **Savage–Dickey Bayes Factor** — test a point-null hypothesis ($\delta = 0$) without fitting a separate null model
+- **Posterior of the null & ROPE** — quantify the posterior mass inside a Region of Practical Equivalence for nuanced decisions beyond simple reject/accept
+- **Posterior predictive checks** — assess model fit by comparing observed data to data simulated from the posterior
+- **Bayes Factor Design Analysis (BFDA)** — plan sample sizes to reach a target level of evidence *before* running the experiment
+- **Publication-ready plots** — posterior distributions, predictive checks, Savage–Dickey density-ratio plots, and BFDA power curves out of the box
 
 ## Quick example
 
