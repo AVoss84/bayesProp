@@ -26,10 +26,28 @@ jobs:
 
       - name: Run tests with coverage
         run: |
-          uv run pytest --cov=bayesAB --cov-report=xml -q
+          uv run pytest --cov=bayesAB --cov-report=xml --cov-report=json:coverage.json -q
 
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5
-        with:
-          files: coverage.xml
-          fail_ci_if_error: false
+      - name: Generate coverage badge
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: |
+          COVERAGE=$(python -c "import json; print(int(json.load(open('coverage.json'))['totals']['percent_covered_display']))")
+          if [ "$COVERAGE" -ge 90 ]; then COLOR="brightgreen"
+          elif [ "$COVERAGE" -ge 75 ]; then COLOR="green"
+          elif [ "$COVERAGE" -ge 60 ]; then COLOR="yellowgreen"
+          elif [ "$COVERAGE" -ge 40 ]; then COLOR="yellow"
+          else COLOR="red"; fi
+          curl -s "https://img.shields.io/badge/coverage-${COVERAGE}%25-${COLOR}" > coverage-badge.svg
+
+      - name: Push badge to badges branch
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git fetch origin badges || true
+          git checkout --orphan badges-tmp
+          git rm -rf .
+          mv coverage-badge.svg .
+          git add coverage-badge.svg
+          git commit -m "Update coverage badge"
+          git push origin HEAD:badges --force
