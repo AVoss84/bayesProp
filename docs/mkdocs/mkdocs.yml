@@ -1,10 +1,10 @@
 # yaml-language-server: $schema=https://squidfunk.github.io/mkdocs-material/schema.json
 site_name: bayesAB
 site_description: Bayesian A/B testing for proportions
-site_url: https://AVoss84.github.io/bayesianAB/
+site_url: https://AVoss84.github.io/bayesAB/
 
-repo_name: AVoss84/bayesianAB
-repo_url: https://github.com/AVoss84/bayesianAB
+repo_name: AVoss84/bayesAB
+repo_url: https://github.com/AVoss84/bayesAB
 
 theme:
   name: material
