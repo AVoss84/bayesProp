@@ -1,5 +1,7 @@
 # bayesAB — Bayesian A/B Testing for Proportions
 
+[![Documentation](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://avoss84.github.io/bayesAB/)
+
 A Python package for **Bayesian hypothesis testing** of binary (pass/fail) outcomes in A/B experiments.
 It provides three complementary models, Savage–Dickey Bayes factors, posterior predictive checks,
 Bayes Factor Design Analysis (BFDA) for sample-size planning, and publication-ready plots.
