@@ -42,12 +42,12 @@ jobs:
       - name: Push badge to badges branch
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: |
+          cp coverage-badge.svg /tmp/coverage-badge.svg
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git fetch origin badges || true
           git checkout --orphan badges-tmp
           git rm -rf .
-          mv coverage-badge.svg .
+          cp /tmp/coverage-badge.svg coverage-badge.svg
           git add coverage-badge.svg
           git commit -m "Update coverage badge"
           git push origin HEAD:badges --force
