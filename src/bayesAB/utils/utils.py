@@ -1,37 +1,3 @@
-"""Bayes Factor Design Analysis (BFDA) utilities for sample-size planning.
-
-Supports both **non-paired** (independent Beta-Bernoulli) and **paired**
-(logistic Polya-Gamma) A/B test designs via a generic simulation engine
-with pluggable BF computation backends.
-
-References:
-    1. Schoenbrodt, F. D. & Wagenmakers, E.-J. (2018). Bayes factor design
-       analysis: Planning for compelling evidence. *Psychonomic Bulletin &
-       Review*, 25(1), 128-142.
-    2. Stefan, A. M., Gronau, Q. F., Schoenbrodt, F. D., & Wagenmakers, E.-J.
-       (2019). A tutorial on Bayes Factor Design Analysis using an informed
-       prior. *Behavior Research Methods*, 51(3), 1042-1058.
-
-Typical usage::
-
-    from bayesAB.utils.utils import (
-        bfda_power_curve,
-        bfda_power_curve_paired,
-        bfda_power_curve_ph0,
-        find_n_for_power,
-        plot_bfda_power,
-        plot_bfda_sensitivity,
-    )
-
-    # Non-paired
-    curve = bfda_power_curve(theta_A_true=0.98, theta_B_true=0.93,
-                             sample_sizes=[50, 100, 200, 500])
-
-    # Paired
-    curve_p = bfda_power_curve_paired(theta_A_true=0.98, theta_B_true=0.93,
-                                      sample_sizes=[50, 100, 200, 500])
-"""
-
 from __future__ import annotations
 
 from typing import Any, Callable
@@ -42,6 +8,13 @@ import numpy.typing as npt
 from scipy.interpolate import interp1d
 
 from bayesAB.resources.bayes_nonpaired import beta_diff_pdf
+from bayesAB.resources.data_schemas import (
+    DecisionRuleType,
+    NonPairedSimResult,
+    NonPairedTrueParams,
+    PairedSimResult,
+    PairedTrueParams,
+)
 
 # ======================================================================
 #  Standalone data simulation utilities
@@ -53,7 +26,8 @@ def simulate_nonpaired_scores(
     theta_A: float = 0.75,
     theta_B: float = 0.60,
     seed: int = 0,
-) -> dict[str, Any]:
+    rng: np.random.Generator | None = None,
+) -> NonPairedSimResult:
     """Simulate independent binary outcomes for a non-paired A/B test.
 
     Each group is sampled independently from a Bernoulli distribution
@@ -64,25 +38,23 @@ def simulate_nonpaired_scores(
         theta_A: True success probability for model A.
         theta_B: True success probability for model B.
         seed: Random seed for reproducibility.
+        rng: Optional pre-seeded RNG; if provided, *seed* is ignored.
 
     Returns:
-        Dictionary with keys ``y_A``, ``y_B`` (binary arrays),
-        ``theta_A``, ``theta_B`` (true rates), and ``true_params``.
+        :class:`NonPairedSimResult` with fields ``y_A``, ``y_B``,
+        ``theta_A``, ``theta_B``, and ``true_params``.
     """
-    rng = np.random.default_rng(seed)
+    if rng is None:
+        rng = np.random.default_rng(seed)
     y_A = rng.binomial(1, theta_A, size=N).astype(float)
     y_B = rng.binomial(1, theta_B, size=N).astype(float)
-    return {
-        "y_A": y_A,
-        "y_B": y_B,
-        "theta_A": theta_A,
-        "theta_B": theta_B,
-        "true_params": {
-            "N": N,
-            "theta_A": theta_A,
-            "theta_B": theta_B,
-        },
-    }
+    return NonPairedSimResult(
+        y_A=y_A,
+        y_B=y_B,
+        theta_A=theta_A,
+        theta_B=theta_B,
+        true_params=NonPairedTrueParams(N=N, theta_A=theta_A, theta_B=theta_B),
+    )
 
 
 def simulate_paired_scores(
@@ -91,7 +63,8 @@ def simulate_paired_scores(
     delta_A: float = 0.5,
     delta_B: float = 0.0,
     seed: int = 0,
-) -> dict[str, Any]:
+    rng: np.random.Generator | None = None,
+) -> PairedSimResult:
     """Simulate paired binary outcomes from a logistic random-effects DGP.
 
     Each item *i* has a latent ability ``theta_i ~ N(0, sigma_theta)``.
@@ -104,31 +77,27 @@ def simulate_paired_scores(
         delta_A: Logit-scale offset for model A.
         delta_B: Logit-scale offset for model B.
         seed: Random seed for reproducibility.
+        rng: Optional pre-seeded RNG; if provided, *seed* is ignored.
 
     Returns:
-        Dictionary with keys ``y_A``, ``y_B`` (binary arrays),
-        ``p_A_true``, ``p_B_true`` (item-level probabilities),
-        ``theta_true`` (latent abilities), and ``true_params``.
+        :class:`PairedSimResult` with fields ``y_A``, ``y_B``,
+        ``p_A_true``, ``p_B_true``, ``theta_true``, and ``true_params``.
     """
-    rng = np.random.default_rng(seed)
+    if rng is None:
+        rng = np.random.default_rng(seed)
     theta_true = rng.normal(0.0, sigma_theta, size=N)
     p_A = _sigmoid(theta_true + delta_A)
     p_B = _sigmoid(theta_true + delta_B)
     y_A = rng.binomial(1, p_A)
     y_B = rng.binomial(1, p_B)
-    return {
-        "y_A": y_A,
-        "y_B": y_B,
-        "p_A_true": p_A,
-        "p_B_true": p_B,
-        "theta_true": theta_true,
-        "true_params": {
-            "N": N,
-            "sigma_theta": sigma_theta,
-            "delta_A": delta_A,
-            "delta_B": delta_B,
-        },
-    }
+    return PairedSimResult(
+        y_A=y_A,
+        y_B=y_B,
+        p_A_true=p_A,
+        p_B_true=p_B,
+        theta_true=theta_true,
+        true_params=PairedTrueParams(N=N, sigma_theta=sigma_theta, delta_A=delta_A, delta_B=delta_B),
+    )
 
 
 def _sigmoid(x: npt.ArrayLike) -> np.ndarray:
@@ -143,229 +112,204 @@ def _sigmoid(x: npt.ArrayLike) -> np.ndarray:
 
 def bfda_simulate(
     data_generator: Callable[[np.random.Generator, int], tuple[np.ndarray, np.ndarray]],
-    bf10_computer: Callable[[np.ndarray, np.ndarray], float],
+    decision_fn: Callable[[np.ndarray, np.ndarray], bool],
     sample_sizes: list[int],
-    bf_threshold: float = 3.0,
     n_sim: int = 500,
     seed: int = 42,
 ) -> dict[int, float]:
-    """Generic BFDA engine -- works with any data-generating process and BF method.
+    """Generic BFDA engine -- works with any data-generating process and decision rule.
 
     Args:
         data_generator: Callable(rng, n) -> (y_A, y_B). Generates one simulated
             dataset of size *n* per group using the provided RNG.
-        bf10_computer: Callable(y_A, y_B) -> BF_10. Computes the Bayes factor
-            in favour of H1 for a single dataset.
+        decision_fn: Callable(y_A, y_B) -> bool. Returns ``True`` when the
+            simulated dataset produces a "decisive" result (i.e. rejects H0).
         sample_sizes: List of per-group sample sizes to evaluate.
-        bf_threshold: BF_10 threshold for "decisive" evidence.
         n_sim: Number of simulated datasets per sample size.
         seed: Random seed for reproducibility.
 
     Returns:
-        Dictionary mapping sample size -> P(BF_10 > threshold).
+        Dictionary mapping sample size -> P(decisive outcome).
     """
     rng = np.random.default_rng(seed)
 
     power: dict[int, float] = {}
     for n in sample_sizes:
-        decisive_count = 0
-        for _ in range(n_sim):
-            y_A, y_B = data_generator(rng, n)
-            bf_10 = bf10_computer(y_A, y_B)
-            if bf_10 > bf_threshold:
-                decisive_count += 1  # Count how many simulations exceed the BF threshold / reject H0
+        decisive_count = sum(decision_fn(*data_generator(rng, n)) for _ in range(n_sim))
         power[n] = decisive_count / n_sim
 
     return power
 
 
 # ======================================================================
-#  Non-paired (independent Beta-Bernoulli)
+#  Data generators (private)
 # ======================================================================
 
 
 def _make_nonpaired_generator(
     theta_A_true: float, theta_B_true: float
 ) -> Callable[[np.random.Generator, int], tuple[np.ndarray, np.ndarray]]:
-    """Create a data generator for independent Bernoulli groups."""
+    """Create a data generator for independent Bernoulli groups.
+
+    Delegates to :func:`simulate_nonpaired_scores`.
+    """
 
     def generator(rng: np.random.Generator, n: int) -> tuple[np.ndarray, np.ndarray]:
-        y_A = rng.binomial(1, theta_A_true, size=n).astype(float)
-        y_B = rng.binomial(1, theta_B_true, size=n).astype(float)
-        return y_A, y_B
+        sim = simulate_nonpaired_scores(N=n, theta_A=theta_A_true, theta_B=theta_B_true, rng=rng)
+        return sim.y_A, sim.y_B
 
     return generator
-
-
-def _make_nonpaired_bf_computer(alpha0: float = 1.0, beta0: float = 1.0) -> Callable[[np.ndarray, np.ndarray], float]:
-    """Create a BF_10 computer for the non-paired Beta-Bernoulli model.
-
-    Uses exact Savage-Dickey via ``beta_diff_pdf``.
-    """
-    prior_at_zero = beta_diff_pdf(0.0, alpha0, beta0, alpha0, beta0)
-
-    def compute_bf10(y_A: np.ndarray, y_B: np.ndarray) -> float:
-        n_A, n_B = len(y_A), len(y_B)
-        k_A, k_B = y_A.sum(), y_B.sum()
-        a_A = alpha0 + k_A
-        b_A = beta0 + (n_A - k_A)
-        a_B = alpha0 + k_B
-        b_B = beta0 + (n_B - k_B)
-
-        post_at_zero = beta_diff_pdf(0.0, a_A, b_A, a_B, b_B)
-        return prior_at_zero / max(post_at_zero, 1e-300)
-
-    return compute_bf10
-
-
-def bfda_power_curve(
-    theta_A_true: float,
-    theta_B_true: float,
-    sample_sizes: list[int],
-    alpha0: float = 1.0,
-    beta0: float = 1.0,
-    bf_threshold: float = 3.0,
-    n_sim: int = 500,
-    seed: int = 42,
-) -> dict[int, float]:
-    """BFDA for **non-paired** Beta-Bernoulli model (exact Savage-Dickey).
-
-    Simulates independent Bernoulli datasets and computes the proportion
-    of simulations where BF_10 exceeds the decision threshold.
-
-    Args:
-        theta_A_true: Assumed true success rate for model A.
-        theta_B_true: Assumed true success rate for model B.
-        sample_sizes: List of per-group sample sizes to evaluate.
-        alpha0: Prior Beta alpha parameter.
-        beta0: Prior Beta beta parameter.
-        bf_threshold: BF_10 threshold for "decisive" evidence.
-        n_sim: Number of simulated datasets per sample size.
-        seed: Random seed for reproducibility.
-
-    Returns:
-        Dictionary mapping sample size -> P(BF_10 > threshold).
-    """
-    return bfda_simulate(
-        data_generator=_make_nonpaired_generator(theta_A_true, theta_B_true),
-        bf10_computer=_make_nonpaired_bf_computer(alpha0, beta0),
-        sample_sizes=sample_sizes,
-        bf_threshold=bf_threshold,
-        n_sim=n_sim,
-        seed=seed,
-    )
-
-
-# ======================================================================
-#  Paired (logistic Polya-Gamma)
-# ======================================================================
 
 
 def _make_paired_generator(
-    theta_A_true: float, theta_B_true: float
+    theta_A_true: float,
+    theta_B_true: float,
+    sigma_theta: float = 2.0,
 ) -> Callable[[np.random.Generator, int], tuple[np.ndarray, np.ndarray]]:
     """Create a data generator for paired Bernoulli observations.
 
-    Same items are scored by both models -- generates paired binary data.
+    Delegates to :func:`simulate_paired_scores` using a logistic
+    random-effects DGP.  ``theta_A_true`` / ``theta_B_true`` are
+    converted to logit-scale offsets internally.
+
+    Note:
+        Due to Jensen's inequality the realised marginal rates will
+        differ slightly from the nominal values when ``sigma_theta > 0``.
+
+    Args:
+        theta_A_true: Target marginal success rate for model A.
+        theta_B_true: Target marginal success rate for model B.
+        sigma_theta: SD of the shared latent item effect (controls
+            within-pair correlation).  ``0`` recovers independent data.
     """
+    delta_A = np.log(theta_A_true / (1.0 - theta_A_true))
+    delta_B = np.log(theta_B_true / (1.0 - theta_B_true))
 
     def generator(rng: np.random.Generator, n: int) -> tuple[np.ndarray, np.ndarray]:
-        y_A = rng.binomial(1, theta_A_true, size=n).astype(float)
-        y_B = rng.binomial(1, theta_B_true, size=n).astype(float)
-        return y_A, y_B
+        sim = simulate_paired_scores(N=n, sigma_theta=sigma_theta, delta_A=delta_A, delta_B=delta_B, rng=rng)
+        return sim.y_A, sim.y_B
 
     return generator
 
 
-def _make_paired_bf_computer(
-    prior_sigma_delta: float = 1.0,
-    prior_sigma_mu: float = 2.0,
-    n_iter: int = 1000,
-    burn_in: int = 300,
-    n_chains: int = 2,
-    seed: int = 42,
-) -> Callable[[np.ndarray, np.ndarray], float]:
-    """Create a BF_10 computer for the paired logistic (PG Gibbs) model.
-
-    Uses Savage-Dickey via KDE on delta_A posterior vs N(0, sigma_delta) prior.
-    """
-
-    def compute_bf10(y_A: np.ndarray, y_B: np.ndarray) -> float:
-        from bayesAB.resources.bayes_paired_pg import PairedBayesPropTestPG
-
-        model = PairedBayesPropTestPG(
-            prior_sigma_delta=prior_sigma_delta,
-            prior_sigma_mu=prior_sigma_mu,
-            seed=seed,
-            n_iter=n_iter,
-            burn_in=burn_in,
-            n_chains=n_chains,
-        ).fit(y_A, y_B)
-
-        bf = model.savage_dickey_test()
-        return bf.BF_10
-
-    return compute_bf10
+# ======================================================================
+#  Decision functions (private)
+# ======================================================================
 
 
-def bfda_power_curve_paired(
-    theta_A_true: float,
-    theta_B_true: float,
-    sample_sizes: list[int],
-    prior_sigma_delta: float = 1.0,
-    prior_sigma_mu: float = 2.0,
+def _make_decision_fn(
+    design: str,
+    decision_rule: DecisionRuleType,
+    *,
+    # BF thresholds
     bf_threshold: float = 3.0,
-    n_sim: int = 200,
+    # P(H0) thresholds
+    ph0_threshold: float = 0.05,
+    prior_H0: float = 0.5,
+    # ROPE thresholds
+    rope: tuple[float, float] = (-0.02, 0.02),
+    ci_mass: float = 0.95,
+    # Non-paired model kwargs
+    alpha0: float = 1.0,
+    beta0: float = 1.0,
+    # Paired model kwargs
+    prior_sigma_delta: float = 1.0,
+    prior_sigma_mu: float = 2.0,
     n_iter: int = 1000,
     burn_in: int = 300,
     n_chains: int = 2,
     seed: int = 42,
-) -> dict[int, float]:
-    """BFDA for **paired** logistic model (Polya-Gamma Gibbs + Savage-Dickey).
+) -> Callable[[np.ndarray, np.ndarray], bool]:
+    """Build a decision function for a given design × decision-rule combination.
 
-    Simulates paired Bernoulli datasets and fits a PG logistic model to
-    compute BF_10 via KDE-based Savage-Dickey on delta_A.
-
-    Note:
-        Computationally more expensive than the non-paired version because
-        each simulated dataset requires MCMC. Use smaller ``n_sim`` and
-        ``n_iter`` for design exploration; increase for final analysis.
+    Returns a callable ``(y_A, y_B) -> bool`` that is ``True`` when the
+    simulated dataset produces a decisive outcome (rejects H0).
 
     Args:
-        theta_A_true: Assumed true success rate for model A.
-        theta_B_true: Assumed true success rate for model B.
-        sample_sizes: List of per-group sample sizes to evaluate.
-        prior_sigma_delta: SD of N(0,sigma) prior on delta_A (logit scale).
-        prior_sigma_mu: SD of N(0,sigma) prior on mu (logit scale).
-        bf_threshold: BF_10 threshold for "decisive" evidence.
-        n_sim: Number of simulated datasets per sample size.
-        n_iter: Total Gibbs iterations per chain.
-        burn_in: Warm-up iterations per chain.
-        n_chains: Number of MCMC chains per dataset.
-        seed: Random seed for reproducibility.
-
-    Returns:
-        Dictionary mapping sample size -> P(BF_10 > threshold).
+        design: ``"nonpaired"`` or ``"paired"``.
+        decision_rule: ``"bayes_factor"``, ``"posterior_null"``, or ``"rope"``.
+        bf_threshold: BF_10 threshold for "decisive" evidence (bayes_factor rule).
+        ph0_threshold: Reject H0 when P(H0|data) falls below this (posterior_null rule).
+        prior_H0: Prior probability of H0 (posterior_null rule).
+        rope: (lower, upper) bounds of the ROPE interval (rope rule).
+        ci_mass: Credible interval mass for ROPE analysis (rope rule).
+        alpha0: Prior Beta alpha parameter (non-paired only).
+        beta0: Prior Beta beta parameter (non-paired only).
+        prior_sigma_delta: SD of N(0, σ) prior on delta_A (paired only).
+        prior_sigma_mu: SD of N(0, σ) prior on mu (paired only).
+        n_iter: Total Gibbs iterations per chain (paired only).
+        burn_in: Warm-up iterations per chain (paired only).
+        n_chains: Number of MCMC chains per dataset (paired only).
+        seed: Random seed for reproducibility (paired only).
     """
-    return bfda_simulate(
-        data_generator=_make_paired_generator(theta_A_true, theta_B_true),
-        bf10_computer=_make_paired_bf_computer(
-            prior_sigma_delta=prior_sigma_delta,
-            prior_sigma_mu=prior_sigma_mu,
-            n_iter=n_iter,
-            burn_in=burn_in,
-            n_chains=n_chains,
-            seed=seed,
-        ),
-        sample_sizes=sample_sizes,
-        bf_threshold=bf_threshold,
-        n_sim=n_sim,
-        seed=seed,
-    )
+    if decision_rule == "all":
+        raise ValueError(
+            "decision_rule='all' is not supported for BFDA. Choose one of 'bayes_factor', 'posterior_null', or 'rope'."
+        )
+
+    # ── Non-paired ────────────────────────────────────────────────────
+    if design == "nonpaired":
+        if decision_rule in ("bayes_factor", "posterior_null"):
+            # Fast analytical BF via Savage-Dickey (no model fitting)
+            prior_at_zero = beta_diff_pdf(0.0, alpha0, beta0, alpha0, beta0)
+
+            def _nonpaired_bf(y_A: np.ndarray, y_B: np.ndarray) -> bool:
+                n_A, n_B = len(y_A), len(y_B)
+                a_A = alpha0 + y_A.sum()
+                b_A = beta0 + (n_A - y_A.sum())
+                a_B = alpha0 + y_B.sum()
+                b_B = beta0 + (n_B - y_B.sum())
+                post_at_zero = beta_diff_pdf(0.0, a_A, b_A, a_B, b_B)
+                bf_10 = prior_at_zero / max(post_at_zero, 1e-300)
+
+                if decision_rule == "bayes_factor":
+                    return bf_10 > bf_threshold
+                # posterior_null
+                return bf10_to_ph0(bf_10, prior_H0) < ph0_threshold
+
+            return _nonpaired_bf
+
+        # ROPE — need model fitting for delta_samples
+        def _nonpaired_rope(y_A: np.ndarray, y_B: np.ndarray) -> bool:
+            from bayesAB.resources.bayes_nonpaired import NonPairedBayesPropTest
+
+            model = NonPairedBayesPropTest(alpha0=alpha0, beta0=beta0, seed=seed).fit(y_A, y_B)
+            result = model.rope_test(rope=rope, ci_mass=ci_mass)
+            return result.decision.startswith("Reject H0")
+
+        return _nonpaired_rope
+
+    # ── Paired ────────────────────────────────────────────────────────
+    if design == "paired":
+
+        def _paired_decide(y_A: np.ndarray, y_B: np.ndarray) -> bool:
+            from bayesAB.resources.bayes_paired_pg import PairedBayesPropTestPG
+
+            model = PairedBayesPropTestPG(
+                prior_sigma_delta=prior_sigma_delta,
+                prior_sigma_mu=prior_sigma_mu,
+                seed=seed,
+                n_iter=n_iter,
+                burn_in=burn_in,
+                n_chains=n_chains,
+            ).fit(y_A, y_B)
+
+            if decision_rule == "bayes_factor":
+                return model.savage_dickey_test().BF_10 > bf_threshold
+            if decision_rule == "posterior_null":
+                bf_10 = model.savage_dickey_test().BF_10
+                return bf10_to_ph0(bf_10, prior_H0) < ph0_threshold
+            # rope
+            result = model.rope_test(rope=rope, ci_mass=ci_mass)
+            return result.decision.startswith("Reject H0")
+
+        return _paired_decide
+
+    raise ValueError(f"Unknown design: {design!r}. Use 'nonpaired' or 'paired'.")
 
 
 # ======================================================================
-#  P(H0) formulation (works with both designs)
+#  Unified BFDA power curve
 # ======================================================================
 
 
@@ -383,63 +327,114 @@ def bf10_to_ph0(bf_10: float, prior_H0: float = 0.5) -> float:
     return (bf_01 * prior_H0) / (bf_01 * prior_H0 + (1 - prior_H0))
 
 
-def bfda_power_curve_ph0(
+def bfda_power_curve(
     theta_A_true: float,
     theta_B_true: float,
     sample_sizes: list[int],
+    design: str = "nonpaired",
+    decision_rule: DecisionRuleType = "bayes_factor",
+    *,
+    # BF thresholds
+    bf_threshold: float = 3.0,
+    # P(H0) thresholds
     ph0_threshold: float = 0.05,
     prior_H0: float = 0.5,
+    # ROPE thresholds
+    rope: tuple[float, float] = (-0.02, 0.02),
+    ci_mass: float = 0.95,
+    # Simulation
     n_sim: int = 500,
     seed: int = 42,
-    design: str = "nonpaired",
+    # Non-paired model priors
     alpha0: float = 1.0,
     beta0: float = 1.0,
-    **paired_kwargs: Any,
+    # Paired DGP
+    sigma_theta: float = 2.0,
+    # Paired model priors / MCMC
+    prior_sigma_delta: float = 1.0,
+    prior_sigma_mu: float = 2.0,
+    n_iter: int = 1000,
+    burn_in: int = 300,
+    n_chains: int = 2,
 ) -> dict[int, float]:
-    """BFDA using P(H0|data) < threshold as the decisiveness criterion.
+    """Unified Bayes Factor Design Analysis for any design × decision-rule.
 
-    Works for both paired and non-paired designs.
+    Simulates datasets under a known effect and estimates the probability
+    that a given Bayesian decision rule will reject H0 as a function of
+    sample size (i.e. Bayesian "power").
+
+    Supported combinations:
+
+    +----------------+----------------+--------------------+--------+
+    | design         | decision_rule  | key threshold      | fast?  |
+    +================+================+====================+========+
+    | ``nonpaired``  | bayes_factor   | ``bf_threshold``   | yes    |
+    | ``nonpaired``  | posterior_null | ``ph0_threshold``  | yes    |
+    | ``nonpaired``  | rope           | ``rope``           | medium |
+    | ``paired``     | bayes_factor   | ``bf_threshold``   | slow   |
+    | ``paired``     | posterior_null | ``ph0_threshold``  | slow   |
+    | ``paired``     | rope           | ``rope``           | slow   |
+    +----------------+----------------+--------------------+--------+
 
     Args:
         theta_A_true: Assumed true success rate for model A.
         theta_B_true: Assumed true success rate for model B.
         sample_sizes: List of per-group sample sizes to evaluate.
-        ph0_threshold: Reject H0 when P(H0|data) falls below this.
-        prior_H0: Prior probability of H0.
+        design: ``"nonpaired"`` or ``"paired"``.
+        decision_rule: ``"bayes_factor"``, ``"posterior_null"``, or ``"rope"``.
+        bf_threshold: BF_10 threshold for decisive evidence (``bayes_factor``).
+        ph0_threshold: Reject H0 when P(H0|data) < this (``posterior_null``).
+        prior_H0: Prior probability of H0 (``posterior_null``).
+        rope: (lower, upper) bounds of the ROPE (``rope``).
+        ci_mass: Credible interval mass for ROPE analysis (``rope``).
         n_sim: Number of simulated datasets per sample size.
         seed: Random seed for reproducibility.
-        design: ``"nonpaired"`` or ``"paired"``.
-        alpha0: Prior Beta alpha (non-paired only).
-        beta0: Prior Beta beta (non-paired only).
-        **paired_kwargs: Extra arguments passed to the paired BF computer
-            (e.g., ``prior_sigma_delta``, ``n_iter``, ``burn_in``, ``n_chains``).
+        alpha0: Prior Beta alpha parameter (non-paired only).
+        beta0: Prior Beta beta parameter (non-paired only).
+        sigma_theta: SD of the shared latent item effect (paired DGP).
+        prior_sigma_delta: SD of N(0, σ) prior on delta_A (paired only).
+        prior_sigma_mu: SD of N(0, σ) prior on mu (paired only).
+        n_iter: Total Gibbs iterations per chain (paired only).
+        burn_in: Warm-up iterations per chain (paired only).
+        n_chains: Number of MCMC chains per dataset (paired only).
 
     Returns:
-        Dictionary mapping sample size -> P(P(H0|data) < threshold).
+        Dictionary mapping sample size -> P(decisive outcome).
     """
+    # Build data generator
     if design == "nonpaired":
         data_gen = _make_nonpaired_generator(theta_A_true, theta_B_true)
-        bf_computer = _make_nonpaired_bf_computer(alpha0, beta0)
     elif design == "paired":
-        data_gen = _make_paired_generator(theta_A_true, theta_B_true)
-        bf_computer = _make_paired_bf_computer(seed=seed, **paired_kwargs)
+        data_gen = _make_paired_generator(theta_A_true, theta_B_true, sigma_theta=sigma_theta)
     else:
         raise ValueError(f"Unknown design: {design!r}. Use 'nonpaired' or 'paired'.")
 
-    rng = np.random.default_rng(seed)
+    # Build decision function
+    decide = _make_decision_fn(
+        design=design,
+        decision_rule=decision_rule,
+        bf_threshold=bf_threshold,
+        ph0_threshold=ph0_threshold,
+        prior_H0=prior_H0,
+        rope=rope,
+        ci_mass=ci_mass,
+        alpha0=alpha0,
+        beta0=beta0,
+        prior_sigma_delta=prior_sigma_delta,
+        prior_sigma_mu=prior_sigma_mu,
+        n_iter=n_iter,
+        burn_in=burn_in,
+        n_chains=n_chains,
+        seed=seed,
+    )
 
-    power: dict[int, float] = {}
-    for n in sample_sizes:
-        decisive_count = 0
-        for _ in range(n_sim):
-            y_A, y_B = data_gen(rng, n)
-            bf_10 = bf_computer(y_A, y_B)
-            p_h0 = bf10_to_ph0(bf_10, prior_H0)
-            if p_h0 < ph0_threshold:
-                decisive_count += 1
-        power[n] = decisive_count / n_sim
-
-    return power
+    return bfda_simulate(
+        data_generator=data_gen,
+        decision_fn=decide,
+        sample_sizes=sample_sizes,
+        n_sim=n_sim,
+        seed=seed,
+    )
 
 
 # ======================================================================
@@ -547,7 +542,7 @@ def plot_bfda_sensitivity(
     design: str = "nonpaired",
     title: str | None = None,
     ax: plt.Axes | None = None,
-    **kwargs,
+    **kwargs: Any,
 ) -> plt.Figure:
     """Plot BFDA power curves for multiple BF_10 thresholds.
 
@@ -563,8 +558,9 @@ def plot_bfda_sensitivity(
         design: ``"nonpaired"`` or ``"paired"``.
         title: Optional custom title.
         ax: Optional matplotlib Axes to plot on.
-        **kwargs (Any): Extra arguments for the specific design (e.g. alpha0, beta0,
-            prior_sigma_delta, n_iter, etc.).
+        **kwargs: Extra arguments forwarded to :func:`bfda_power_curve`
+            (e.g. ``alpha0``, ``beta0``, ``sigma_theta``,
+            ``prior_sigma_delta``, ``n_iter``, etc.).
 
     Returns:
         The matplotlib Figure.
@@ -580,30 +576,17 @@ def plot_bfda_sensitivity(
     colors = ["#4CAF50", "#FF9800", "#E91E63", "#9C27B0", "#2196F3"]
 
     for thresh, col in zip(thresholds, colors, strict=False):
-        if design == "nonpaired":
-            curve = bfda_power_curve(
-                theta_A_true=theta_A_true,
-                theta_B_true=theta_B_true,
-                sample_sizes=sample_sizes,
-                bf_threshold=thresh,
-                n_sim=n_sim,
-                seed=seed,
-                alpha0=kwargs.get("alpha0", 1.0),
-                beta0=kwargs.get("beta0", 1.0),
-            )
-        elif design == "paired":
-            paired_kw = {k: v for k, v in kwargs.items() if k not in ("alpha0", "beta0")}
-            curve = bfda_power_curve_paired(
-                theta_A_true=theta_A_true,
-                theta_B_true=theta_B_true,
-                sample_sizes=sample_sizes,
-                bf_threshold=thresh,
-                n_sim=n_sim,
-                seed=seed,
-                **paired_kw,
-            )
-        else:
-            raise ValueError(f"Unknown design: {design!r}")
+        curve = bfda_power_curve(
+            theta_A_true=theta_A_true,
+            theta_B_true=theta_B_true,
+            sample_sizes=sample_sizes,
+            design=design,
+            decision_rule="bayes_factor",
+            bf_threshold=thresh,
+            n_sim=n_sim,
+            seed=seed,
+            **kwargs,
+        )
 
         ax.plot(
             list(curve.keys()),

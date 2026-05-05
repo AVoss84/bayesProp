@@ -41,12 +41,14 @@ plot_bfda_power(curve, theta_A_true=0.85, theta_B_true=0.70)
 ## Paired design
 
 ```python
-from bayesAB.utils.utils import bfda_power_curve_paired
+from bayesAB.utils.utils import bfda_power_curve
 
-curve_paired = bfda_power_curve_paired(
+curve_paired = bfda_power_curve(
     theta_A_true=0.85,
     theta_B_true=0.70,
     sample_sizes=[20, 50, 100, 200],
+    design="paired",
+    decision_rule="bayes_factor",
     n_sim=100,   # fewer sims — each requires MCMC
     seed=42,
 )
@@ -76,14 +78,15 @@ Instead of a BF threshold, you can use \\(P(H_0 \mid \text{data}) < \alpha\\)
 as the decisiveness criterion:
 
 ```python
-from bayesAB.utils.utils import bfda_power_curve_ph0
+from bayesAB.utils.utils import bfda_power_curve
 
-curve_ph0 = bfda_power_curve_ph0(
+curve_ph0 = bfda_power_curve(
     theta_A_true=0.85,
     theta_B_true=0.70,
     sample_sizes=[50, 100, 200],
-    ph0_threshold=0.05,
     design="nonpaired",
+    decision_rule="posterior_null",
+    ph0_threshold=0.05,
     n_sim=500,
 )
 ```

@@ -98,7 +98,7 @@ from bayesAB.utils.utils import simulate_paired_scores
 sim = simulate_paired_scores(
     N=200, delta_A=0.5, seed=42
 )
-model = PairedBayesPropTest(seed=42).fit(sim["y_A"], sim["y_B"])
+model = PairedBayesPropTest(seed=42).fit(sim.y_A, sim.y_B)
 ```
 
 ## Prior sensitivity analysis

@@ -72,6 +72,53 @@ class PPCStatistic(BaseModel):
 
 
 # ====================================================================== #
+#  Simulation result schemas
+# ====================================================================== #
+
+
+class NonPairedTrueParams(BaseModel):
+    """True parameters used to generate non-paired simulation data."""
+
+    N: int = Field(..., gt=0, description="Number of observations per group.")
+    theta_A: float = Field(..., ge=0, le=1, description="True success rate for model A.")
+    theta_B: float = Field(..., ge=0, le=1, description="True success rate for model B.")
+
+
+class NonPairedSimResult(BaseModel):
+    """Output of :func:`simulate_nonpaired_scores`."""
+
+    model_config = {"arbitrary_types_allowed": True}
+
+    y_A: npt.NDArray[np.float64] = Field(..., description="Binary outcomes for model A.")
+    y_B: npt.NDArray[np.float64] = Field(..., description="Binary outcomes for model B.")
+    theta_A: float = Field(..., ge=0, le=1, description="True success rate for model A.")
+    theta_B: float = Field(..., ge=0, le=1, description="True success rate for model B.")
+    true_params: NonPairedTrueParams = Field(..., description="True simulation parameters.")
+
+
+class PairedTrueParams(BaseModel):
+    """True parameters used to generate paired simulation data."""
+
+    N: int = Field(..., gt=0, description="Number of paired observations.")
+    sigma_theta: float = Field(..., ge=0, description="SD of the latent item ability.")
+    delta_A: float = Field(..., description="Logit-scale offset for model A.")
+    delta_B: float = Field(..., description="Logit-scale offset for model B.")
+
+
+class PairedSimResult(BaseModel):
+    """Output of :func:`simulate_paired_scores`."""
+
+    model_config = {"arbitrary_types_allowed": True}
+
+    y_A: npt.NDArray[np.float64] = Field(..., description="Binary outcomes for model A.")
+    y_B: npt.NDArray[np.float64] = Field(..., description="Binary outcomes for model B.")
+    p_A_true: npt.NDArray[np.float64] = Field(..., description="Item-level probabilities for model A.")
+    p_B_true: npt.NDArray[np.float64] = Field(..., description="Item-level probabilities for model B.")
+    theta_true: npt.NDArray[np.float64] = Field(..., description="Latent item abilities.")
+    true_params: PairedTrueParams = Field(..., description="True simulation parameters.")
+
+
+# ====================================================================== #
 #  Non-paired Beta-Bernoulli model
 # ====================================================================== #
 

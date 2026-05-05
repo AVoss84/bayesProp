@@ -11,7 +11,6 @@ matplotlib.use("Agg")
 from bayesAB.utils.utils import (
     bf10_to_ph0,
     bfda_power_curve,
-    bfda_power_curve_ph0,
     bfda_simulate,
     find_n_for_power,
     plot_bfda_power,
@@ -52,10 +51,10 @@ class TestBfdaSimulate:
         def gen(rng: np.random.Generator, n: int) -> tuple[np.ndarray, np.ndarray]:
             return rng.binomial(1, 0.7, n).astype(float), rng.binomial(1, 0.5, n).astype(float)
 
-        def bf_comp(y_a: np.ndarray, y_b: np.ndarray) -> float:
-            return 5.0  # always decisive
+        def decide(y_a: np.ndarray, y_b: np.ndarray) -> bool:
+            return True  # always decisive
 
-        result = bfda_simulate(gen, bf_comp, sample_sizes=[10, 20], n_sim=10, seed=42)
+        result = bfda_simulate(gen, decide, sample_sizes=[10, 20], n_sim=10, seed=42)
         assert isinstance(result, dict)
         assert set(result.keys()) == {10, 20}
 
@@ -63,20 +62,20 @@ class TestBfdaSimulate:
         def gen(rng: np.random.Generator, n: int) -> tuple[np.ndarray, np.ndarray]:
             return rng.binomial(1, 0.7, n).astype(float), rng.binomial(1, 0.5, n).astype(float)
 
-        def bf_comp(y_a: np.ndarray, y_b: np.ndarray) -> float:
-            return 2.0  # below threshold
+        def decide(y_a: np.ndarray, y_b: np.ndarray) -> bool:
+            return False  # never decisive
 
-        result = bfda_simulate(gen, bf_comp, sample_sizes=[10], bf_threshold=3.0, n_sim=10, seed=42)
+        result = bfda_simulate(gen, decide, sample_sizes=[10], n_sim=10, seed=42)
         assert 0.0 <= result[10] <= 1.0
 
     def test_always_decisive(self) -> None:
         def gen(rng: np.random.Generator, n: int) -> tuple[np.ndarray, np.ndarray]:
             return np.ones(n), np.zeros(n)
 
-        def bf_comp(y_a: np.ndarray, y_b: np.ndarray) -> float:
-            return 100.0
+        def decide(y_a: np.ndarray, y_b: np.ndarray) -> bool:
+            return True
 
-        result = bfda_simulate(gen, bf_comp, sample_sizes=[5], bf_threshold=3.0, n_sim=20, seed=0)
+        result = bfda_simulate(gen, decide, sample_sizes=[5], n_sim=20, seed=0)
         assert result[5] == 1.0
 
 
@@ -115,20 +114,21 @@ class TestBfdaPowerCurvePh0:
     """Tests for the P(H0)-based BFDA power curve."""
 
     def test_nonpaired_design(self) -> None:
-        result = bfda_power_curve_ph0(
+        result = bfda_power_curve(
             theta_A_true=0.8,
             theta_B_true=0.5,
             sample_sizes=[50],
             n_sim=20,
             seed=42,
             design="nonpaired",
+            decision_rule="posterior_null",
         )
         assert 50 in result
         assert 0.0 <= result[50] <= 1.0
 
     def test_invalid_design_raises(self) -> None:
         with pytest.raises(ValueError, match="Unknown design"):
-            bfda_power_curve_ph0(
+            bfda_power_curve(
                 theta_A_true=0.8,
                 theta_B_true=0.5,
                 sample_sizes=[50],

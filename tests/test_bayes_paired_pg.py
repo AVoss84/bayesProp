@@ -312,9 +312,9 @@ class TestPairedPGStatic:
         from bayesAB.utils.utils import simulate_paired_scores
 
         sim = simulate_paired_scores(N=30, seed=0)
-        assert isinstance(sim, dict)
-        assert len(sim["y_A"]) == 30
-        assert len(sim["y_B"]) == 30
+        assert hasattr(sim, "y_A")
+        assert len(sim.y_A) == 30
+        assert len(sim.y_B) == 30
 
     def test_plot_forest(self, fitted_model: PairedBayesPropTestPG) -> None:
         results = {"metric1": fitted_model}

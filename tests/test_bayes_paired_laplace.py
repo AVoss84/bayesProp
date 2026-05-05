@@ -284,9 +284,9 @@ class TestPairedLaplaceStatic:
         from bayesAB.utils.utils import simulate_paired_scores
 
         sim = simulate_paired_scores(N=50, seed=0)
-        assert isinstance(sim, dict)
-        assert len(sim["y_A"]) == 50
-        assert len(sim["y_B"]) == 50
+        assert hasattr(sim, "y_A")
+        assert len(sim.y_A) == 50
+        assert len(sim.y_B) == 50
 
     def test_plot_forest(self, fitted_model: PairedBayesPropTest) -> None:
         results = {"metric1": fitted_model}

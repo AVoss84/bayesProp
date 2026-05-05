@@ -24,7 +24,7 @@ from bayesAB.utils.utils import simulate_nonpaired_scores
 
 # Simulate binary outcomes
 sim = simulate_nonpaired_scores(N=100, theta_A=0.85, theta_B=0.70, seed=42)
-y_A, y_B = sim["y_A"], sim["y_B"]
+y_A, y_B = sim.y_A, sim.y_B
 
 # Fit the model
 model = NonPairedBayesPropTest(seed=42, n_samples=20_000).fit(y_A, y_B)
@@ -52,7 +52,7 @@ from bayesAB.utils.utils import simulate_paired_scores
 
 # Simulate paired binary data (y_A[i] and y_B[i] refer to the same item)
 sim = simulate_paired_scores(N=100, delta_A=0.5, seed=42)
-y_A, y_B = sim["y_A"], sim["y_B"]
+y_A, y_B = sim.y_A, sim.y_B
 
 model = PairedBayesPropTest(seed=42).fit(y_A, y_B)
 model.print_summary()

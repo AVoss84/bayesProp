@@ -23,7 +23,7 @@ from bayesAB.utils.utils import simulate_paired_scores
 
 # Simulate paired binary data
 sim = simulate_paired_scores(N=200, delta_A=0.5, seed=42)
-y_A, y_B = sim["y_A"], sim["y_B"]
+y_A, y_B = sim.y_A, sim.y_B
 
 # Fit & summarise
 model = PairedBayesPropTestPG(seed=42, n_iter=2000, burn_in=500, n_chains=4).fit(y_A, y_B)

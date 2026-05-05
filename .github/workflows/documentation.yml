@@ -1,10 +1,9 @@
 name: Deploy Documentation to GitHub Pages
 
 on:
-  # push:
-  #   branches:
-  #     - main
-  #     # - Development
+  push:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
@@ -26,20 +25,21 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.13"
 
       - name: Install dependencies
         run: |
           pip install "mkdocs<2" mkdocs-material "mkdocstrings[python]>=1.0.3"
+          pip install -e .
 
       - name: Build MkDocs site
-        working-directory: src
+        working-directory: docs/mkdocs
         run: mkdocs build --strict
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: src/site
+          path: docs/mkdocs/site
 
   deploy:
     environment:

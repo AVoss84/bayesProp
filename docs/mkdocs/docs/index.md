@@ -20,7 +20,7 @@ from bayesAB.resources.bayes_nonpaired import NonPairedBayesPropTest
 from bayesAB.utils.utils import simulate_nonpaired_scores
 
 sim = simulate_nonpaired_scores(N=100, theta_A=0.85, theta_B=0.70, seed=42)
-y_A, y_B = sim["y_A"], sim["y_B"]
+y_A, y_B = sim.y_A, sim.y_B
 
 model = NonPairedBayesPropTest(seed=42).fit(y_A, y_B)
 model.print_summary()
