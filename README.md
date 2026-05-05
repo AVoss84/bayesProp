@@ -1,6 +1,6 @@
 # Bayesian A/B Testing for Proportions
 
-[![PyPI](https://img.shields.io/pypi/v/bayesAB?logo=pypi&logoColor=white)](https://pypi.org/project/bayesAB/)
+[![TestPyPI](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Ftest.pypi.org%2Fpypi%2FbayesAB%2Fjson&query=%24.info.version&prefix=v&logo=pypi&logoColor=white&label=TestPyPI)](https://test.pypi.org/project/bayesAB/)
 [![Documentation](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://avoss84.github.io/bayesAB/)
 [![Python](https://img.shields.io/badge/python-%E2%89%A53.13-blue?logo=python&logoColor=white)](https://www.python.org/)
 [![Tests](https://github.com/AVoss84/bayesAB/actions/workflows/tests.yml/badge.svg)](https://github.com/AVoss84/bayesAB/actions/workflows/tests.yml)

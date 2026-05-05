@@ -63,7 +63,7 @@ solve — no Metropolis-Hastings tuning is needed.
 
 ## MCMC convergence diagnostics
 
-### Gelman-Rubin $\hat{R}$
+### Gelman-Rubin R-hat
 
 With $m$ independent chains of length $n$, the potential scale reduction
 factor is:
