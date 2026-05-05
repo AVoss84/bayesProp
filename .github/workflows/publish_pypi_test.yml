@@ -2,10 +2,16 @@ name: Publish to Test PyPI
 
 on:
   workflow_dispatch:
+  # push:
+  #   tags:
+  #     - "test-0.*"
 
 jobs:
   build-and-upload:
     runs-on: ubuntu-latest
+
+    permissions:
+      id-token: write
 
     steps:
       - name: Check out code
@@ -30,6 +36,6 @@ jobs:
 
       - name: Upload to Test PyPI
         if: success()
-        run: uv publish --index-url https://test.pypi.org/legacy/
-        env:
-          UV_PUBLISH_TOKEN: ${{ secrets.TEST_PYPI_API_TOKEN }}
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
