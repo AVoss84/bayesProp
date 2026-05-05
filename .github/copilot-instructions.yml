@@ -1,6 +1,6 @@
-# GitHub Copilot Instructions — bayesAB
+# GitHub Copilot Instructions — bayesprop
 
-> Instructions for GitHub Copilot when working in the **bayesAB** repository
+> Instructions for GitHub Copilot when working in the **bayesprop** repository
 > (Bayesian A/B testing for proportions).
 
 ---
@@ -15,7 +15,7 @@ Review changes against these hooks in order:
 | **Ruff Format** | `uv run ruff format` | Always (auto-runs on commit) |
 | **Ruff Lint** | `uv run ruff check --fix` | Always (auto-runs on commit) |
 | **Mypy (incremental)** | `uv run mypy` | Manual stage — run before opening PR |
-| **Mypy (full project)** | `uv run mypy src/bayesAB` | Manual stage — run for large changes |
+| **Mypy (full project)** | `uv run mypy src/bayesprop` | Manual stage — run for large changes |
 
 Flag any diff that would fail these hooks:
 - Formatting inconsistencies that `ruff format` would change (line-length 120, double quotes, space indent).
@@ -123,7 +123,7 @@ When code changes affect any of the areas below, the corresponding doc **must** 
 ### Key directories
 
 ```
-src/bayesAB/
+src/bayesprop/
 ├── config/                    # global_config, YAML configs
 ├── resources/
 │   ├── bayes_nonpaired.py     # NonPairedBayesPropTest (Beta-Bernoulli)

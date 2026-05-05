@@ -28,7 +28,7 @@ jobs:
 
       - name: Run tests with coverage
         run: |
-          uv run pytest --cov=bayesAB --cov-report=xml --cov-report=json:coverage.json -q
+          uv run pytest --cov=bayesprop --cov-report=xml --cov-report=json:coverage.json -q
 
       - name: Generate coverage badge
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'

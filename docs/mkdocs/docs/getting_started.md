@@ -3,20 +3,20 @@
 ## Installation
 
 ```bash
-pip install bayesAB
+pip install bayesprop
 ```
 
 Or with [uv](https://github.com/astral-sh/uv):
 
 ```bash
-uv pip install bayesAB
+uv pip install bayesprop
 ```
 
 For development (from source):
 
 ```bash
-git clone https://github.com/AVoss84/bayesAB.git
-cd bayesAB
+git clone https://github.com/AVoss84/bayesProp.git
+cd bayesprop
 uv venv --python 3.13
 uv sync
 source .venv/bin/activate
@@ -29,8 +29,8 @@ source .venv/bin/activate
 Use this when model A and model B are evaluated on **different** items.
 
 ```python
-from bayesAB.resources.bayes_nonpaired import NonPairedBayesPropTest
-from bayesAB.utils.utils import simulate_nonpaired_scores
+from bayesprop.resources.bayes_nonpaired import NonPairedBayesPropTest
+from bayesprop.utils.utils import simulate_nonpaired_scores
 
 # Simulate binary outcomes
 sim = simulate_nonpaired_scores(N=100, theta_A=0.85, theta_B=0.70, seed=42)
@@ -57,8 +57,8 @@ model.plot_savage_dickey()
 Use this when **both** models are evaluated on the **same** items.
 
 ```python
-from bayesAB.resources.bayes_paired_laplace import PairedBayesPropTest
-from bayesAB.utils.utils import simulate_paired_scores
+from bayesprop.resources.bayes_paired_laplace import PairedBayesPropTest
+from bayesprop.utils.utils import simulate_paired_scores
 
 # Simulate paired binary data (y_A[i] and y_B[i] refer to the same item)
 sim = simulate_paired_scores(N=100, delta_A=0.5, seed=42)
@@ -78,7 +78,7 @@ model.plot_savage_dickey()
 For exact MCMC inference with convergence diagnostics:
 
 ```python
-from bayesAB.resources.bayes_paired_pg import PairedBayesPropTestPG
+from bayesprop.resources.bayes_paired_pg import PairedBayesPropTestPG
 
 # Reuse paired data from above
 model = PairedBayesPropTestPG(seed=42, n_iter=2000, burn_in=500, n_chains=4)
@@ -110,7 +110,7 @@ NonPairedBayesPropTest.print_comparison_table(results)
 Use Bayes Factor Design Analysis (BFDA) to determine how many observations you need:
 
 ```python
-from bayesAB.utils.utils import bfda_power_curve, plot_bfda_power
+from bayesprop.utils.utils import bfda_power_curve, plot_bfda_power
 
 curve = bfda_power_curve(
     theta_A_true=0.85, theta_B_true=0.70,

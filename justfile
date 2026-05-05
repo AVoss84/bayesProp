@@ -1,5 +1,5 @@
 # Variables
-ROOT_FOLDER := "src/bayesAB"
+ROOT_FOLDER := "src/bayesprop"
 DOCS_DIR := "docs/mkdocs"
 
 # ─── Documentation ─────────────────────────────────────────────

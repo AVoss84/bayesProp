@@ -22,7 +22,7 @@ repos:
 
       - id: mypy-full
         name: Mypy (full project)
-        entry: uv run mypy src/bayesAB
+        entry: uv run mypy src/bayesprop
         language: system
         pass_filenames: false
         stages: [manual]

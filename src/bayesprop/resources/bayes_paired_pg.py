@@ -1,27 +1,28 @@
-"""Pooled Bernoulli logistic regression for paired A/B model comparison (Laplace).
+"""Pooled Bernoulli logistic regression for paired A/B model comparison (Pólya-Gamma).
 
-This module provides :class:`PairedBayesPropTest`, a self-contained class
-for fitting a pooled Bayesian Bernoulli logistic model to paired binary
-scores via Laplace approximation (MAP + analytical Hessian), performing
-hypothesis testing via the Savage-Dickey density ratio, running
-posterior-predictive diagnostics, and generating publication-ready plots.
+This module provides :class:`PairedBayesPropTestPG`, a class for fitting
+a pooled Bayesian Bernoulli logistic model to paired binary scores using
+exact Pólya-Gamma data augmentation (Gibbs sampling), performing hypothesis
+testing via the Savage-Dickey density ratio, running posterior-predictive
+diagnostics, and generating publication-ready plots.
 
-For exact MCMC inference via Pólya-Gamma data augmentation, see
-:mod:`ai_eval.resources.bayes_paired_pg`.
+Compared to the Laplace approximation in :mod:`ai_eval.resources.bayes_paired_laplace`,
+the PG sampler provides exact (up to MCMC error) posterior inference and
+multi-chain MCMC diagnostics (R-hat, ESS).
 
 Typical workflow::
 
-    from ai_eval.resources.bayes_paired_laplace import PairedBayesPropTest
+    from ai_eval.resources.bayes_paired_pg import PairedBayesPropTestPG
 
-    model = PairedBayesPropTest(seed=42).fit(y_A, y_B)
+    model = PairedBayesPropTestPG(seed=42).fit(y_A, y_B)
     model.print_summary()
+    model.plot_trace()
     model.plot_posterior_delta()
-    model.plot_savage_dickey()
 
 For multi-metric comparisons::
 
     results = {"Relevancy": model_rel, "Faithfulness": model_faith}
-    PairedBayesPropTest.plot_forest(results, label_A="v2", label_B="v1")
+    PairedBayesPropTestPG.plot_forest(results, label_A="v2", label_B="v1")
 """
 
 from __future__ import annotations
@@ -31,13 +32,16 @@ from typing import Any
 import numpy as np
 import numpy.typing as npt
 import pandas as pd
-from scipy.optimize import minimize
+from numpy.linalg import solve
+from polyagamma import random_polyagamma
 from scipy.stats import gaussian_kde, norm
 
-from bayesAB.resources.data_schemas import (
+from bayesprop.resources.data_schemas import (
     CredibleInterval,
     DecisionRuleType,
     HypothesisDecision,
+    MCMCDiagnostics,
+    MCMCParamDiagnostic,
     PairedSummary,
     PosteriorProbH0Result,
     PPCStatistic,
@@ -47,8 +51,13 @@ from bayesAB.resources.data_schemas import (
 
 
 def sigmoid(x: npt.ArrayLike) -> np.ndarray:
-    """Element-wise sigmoid (logistic) function."""
-    return 1.0 / (1.0 + np.exp(-x))
+    """Numerically stable element-wise sigmoid function."""
+    x = np.asarray(x, dtype=float)
+    return np.where(
+        x >= 0,
+        1.0 / (1.0 + np.exp(-x)),
+        np.exp(x) / (1.0 + np.exp(x)),
+    )
 
 
 def _format_bf(value: float) -> str:
@@ -61,34 +70,50 @@ def _format_bf(value: float) -> str:
         return f"{value:.2f}"
 
 
-class PairedBayesPropTest:
-    """Pooled Bernoulli logistic model for paired A/B comparison.
+def _build_design_matrix(y_A: np.ndarray, y_B: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Stack paired binary outcomes into a design matrix for logistic regression.
 
-    Uses Laplace approximation (MAP + Hessian) instead of full MCMC
-    for fast, analytic posterior inference on binarized scores.
+    Returns:
+        (X, y) where X is (2n, 2) with columns [intercept, d_A]
+        and y is (2n,) stacked binary outcomes.
+    """
+    n = len(y_A)
+    X_A = np.column_stack([np.ones(n), np.ones(n)])  # intercept=1, d_A=1
+    X_B = np.column_stack([np.ones(n), np.zeros(n)])  # intercept=1, d_A=0
+    X = np.vstack([X_A, X_B])
+    y = np.concatenate([y_A, y_B])
+    return X, y
 
-    Generative model::
 
-        μ      ~ N(0, 2)              (overall intercept)
+class PairedBayesPropTestPG:
+    """Pooled Bernoulli logistic model for paired A/B comparison (PG Gibbs).
+
+    Uses Pólya-Gamma data augmentation for exact Gibbs sampling instead
+    of Laplace approximation.
+
+    Generative model (identical to the Laplace version)::
+
+        μ      ~ N(0, σ_μ)            (overall intercept)
         δ_A    ~ N(0, σ_δ)            (model-A advantage)
         y_A,i  ~ Bernoulli(σ(μ + δ_A))
         y_B,i  ~ Bernoulli(σ(μ))
 
-    Only 2 parameters — no confounding between item effects and model
-    effect when >90% of pairs are concordant.
+    Inference proceeds by augmenting with Pólya-Gamma latent variables
+    ω_i ~ PG(1, x_i'β), which yields conjugate Gaussian conditionals
+    for β = [μ, δ_A].
 
-    The prior width on ``delta_A`` is fixed (not learned) so the
-    Savage-Dickey density ratio remains exactly consistent.
+    Multiple independent chains are run for MCMC diagnostics (R-hat, ESS).
 
     Attributes:
-        laplace: Dict with MAP estimate, covariance, Hessian, and
-            posterior samples (``None`` before :meth:`fit`).
+        chains: Array of shape ``(n_chains, n_samples, 2)`` with posterior
+            draws for ``[mu, delta_A]`` per chain (``None`` before :meth:`fit`).
+        samples: Pooled posterior draws, shape ``(n_total, 2)``.
         summary: Dict with ``mean_delta``, ``ci_95``, ``P(A > B)``,
             and ``delta_A_posterior_mean`` on the probability scale.
         trace_summary: ``pandas.DataFrame`` with posterior summary
-            for ``delta_A`` and ``mu``.
-        delta_A_samples: 1-D array of posterior draws for ``delta_A``
-            (logit scale), shape ``(n_samples,)``.
+            for ``delta_A`` and ``mu`` including R-hat and ESS.
+        delta_A_samples: 1-D array of pooled posterior draws for ``delta_A``
+            (logit scale).
         y_A_obs: Observed binary scores for model A (set by :meth:`fit`).
         y_B_obs: Observed binary scores for model B (set by :meth:`fit`).
     """
@@ -96,30 +121,41 @@ class PairedBayesPropTest:
     def __init__(
         self,
         prior_sigma_delta: float = 1.0,
+        prior_sigma_mu: float = 2.0,
         seed: int = 0,
-        n_samples: int = 8000,
+        n_iter: int = 2000,
+        burn_in: int = 500,
+        n_chains: int = 4,
         decision_rule: DecisionRuleType = "all",
         rope_epsilon: float = 0.02,
     ) -> None:
         """Initialise model configuration.
 
         Args:
-            prior_sigma_delta: Standard deviation of the N(0, σ) prior on
-                ``delta_A`` (logit scale).
+            prior_sigma_delta: Standard deviation of the N(0, σ) prior
+                on ``delta_A`` (logit scale).
+            prior_sigma_mu: Standard deviation of the N(0, σ) prior
+                on ``mu`` (logit scale).
             seed: Random seed for reproducibility.
-            n_samples: Number of draws from the Laplace posterior.
+            n_iter: Total Gibbs iterations per chain (including burn-in).
+            burn_in: Number of warm-up iterations to discard per chain.
+            n_chains: Number of independent MCMC chains.
             decision_rule: Default decision framework — one of
                 ``"bayes_factor"``, ``"posterior_null"``, ``"rope"``, or ``"all"``.
             rope_epsilon: Half-width of the ROPE interval (default 0.02 = 2 pp).
         """
         self.prior_sigma_delta: float = prior_sigma_delta
+        self.prior_sigma_mu: float = prior_sigma_mu
         self.seed: int = seed
-        self.n_samples: int = n_samples
+        self.n_iter: int = n_iter
+        self.burn_in: int = burn_in
+        self.n_chains: int = n_chains
         self.decision_rule: DecisionRuleType = decision_rule
         self.rope_epsilon: float = rope_epsilon
 
         # --- Populated by .fit() ---
-        self.laplace: dict[str, Any] | None = None
+        self.chains: np.ndarray | None = None
+        self.samples: np.ndarray | None = None
         self.summary: dict[str, Any] | None = None
         self.trace_summary: pd.DataFrame | None = None
         self.delta_A_samples: np.ndarray | None = None
@@ -128,34 +164,60 @@ class PairedBayesPropTest:
         self.y_B_obs: np.ndarray | None = None
 
     # ------------------------------------------------------------------ #
+    #  Internal sampler
+    # ------------------------------------------------------------------ #
+
+    def _run_single_chain(
+        self,
+        X: np.ndarray,
+        y: np.ndarray,
+        rng: np.random.Generator,
+    ) -> np.ndarray:
+        """Run one PG Gibbs chain.
+
+        Returns:
+            Array of shape ``(n_iter - burn_in, 2)`` with posterior draws.
+        """
+        n, p = X.shape
+        kappa = y - 0.5
+
+        # Prior precision
+        B0_inv = np.diag(
+            [
+                1.0 / self.prior_sigma_mu**2,
+                1.0 / self.prior_sigma_delta**2,
+            ]
+        )
+        b0 = np.zeros(p)
+
+        beta = np.zeros(p)
+        samples = []
+
+        for it in range(self.n_iter):
+            eta = X @ beta
+
+            # Pólya-Gamma step: ω_i ~ PG(1, η_i)
+            omega = random_polyagamma(1.0, eta, random_state=rng)
+
+            # Posterior conditional: β | ω, y
+            A = X.T @ np.diag(omega) @ X + B0_inv
+            rhs = X.T @ kappa + B0_inv @ b0
+            Sigma = solve(A, np.eye(p))
+            mu_post = Sigma @ rhs
+
+            beta = rng.multivariate_normal(mu_post, Sigma)
+
+            if it >= self.burn_in:
+                samples.append(beta.copy())
+
+        return np.array(samples)
+
+    # ------------------------------------------------------------------ #
     #  Fitting
     # ------------------------------------------------------------------ #
 
-    def fit(self, y_A_obs: np.ndarray, y_B_obs: np.ndarray) -> PairedBayesPropTest:
-        """Fit the pooled Bernoulli model via Laplace approximation.
-
-        Analytically computes the MAP via L-BFGS-B on the negative
-        log-posterior, then evaluates the closed-form Hessian at the
-        MAP to obtain the Laplace covariance: Σ = H⁻¹.
-
-        Log-posterior (up to constant)::
-
-            log p(μ, δ|y) = Σᵢ [y_Aᵢ log σ(μ+δ) + (1-y_Aᵢ) log(1-σ(μ+δ))]
-                          + Σᵢ [y_Bᵢ log σ(μ)   + (1-y_Bᵢ) log(1-σ(μ))]
-                          - μ²/(2σ_μ²) - δ²/(2σ_δ²)
-
-        Gradient::
-
-            ∂/∂μ = (k_A - n_A·p_A) + (k_B - n_B·p_B) - μ/σ_μ²
-            ∂/∂δ = (k_A - n_A·p_A)                    - δ/σ_δ²
-
-        Hessian of the *negative* log-posterior (observed information)::
-
-            H[0,0] = n_A·w_A + n_B·w_B + 1/σ_μ²
-            H[1,1] = n_A·w_A           + 1/σ_δ²
-            H[0,1] = H[1,0] = n_A·w_A
-
-        where w_A = p_A(1-p_A), w_B = p_B(1-p_B), evaluated at MAP.
+    def fit(self, y_A_obs: np.ndarray, y_B_obs: np.ndarray) -> PairedBayesPropTestPG:
+        """Fit the model via PG Gibbs sampling with multiple chains.
 
         Args:
             y_A_obs: Binary observed scores for model A (0 or 1).
@@ -167,68 +229,29 @@ class PairedBayesPropTest:
         self.y_A_obs = np.asarray(y_A_obs, dtype=int)
         self.y_B_obs = np.asarray(y_B_obs, dtype=int)
 
-        rng = np.random.default_rng(self.seed)
+        X, y = _build_design_matrix(self.y_A_obs, self.y_B_obs)
 
-        n_A = len(self.y_A_obs)
-        k_A = int(self.y_A_obs.sum())
-        n_B = len(self.y_B_obs)
-        k_B = int(self.y_B_obs.sum())
-        sigma_mu = 2.0
-        sigma_delta = self.prior_sigma_delta
+        # Run multiple chains with different seeds
+        seed_seq = np.random.SeedSequence(self.seed)
+        child_seeds = seed_seq.spawn(self.n_chains)
 
-        def neg_log_post(params: np.ndarray) -> float:
-            mu, delta = params
-            p_A = sigmoid(mu + delta)
-            p_B = sigmoid(mu)
-            # Clip to avoid log(0)
-            eps = 1e-15
-            p_A = np.clip(p_A, eps, 1 - eps)
-            p_B = np.clip(p_B, eps, 1 - eps)
-            ll = k_A * np.log(p_A) + (n_A - k_A) * np.log(1 - p_A)
-            ll += k_B * np.log(p_B) + (n_B - k_B) * np.log(1 - p_B)
-            lp = -(mu**2) / (2 * sigma_mu**2) - delta**2 / (2 * sigma_delta**2)
-            return -(ll + lp)
+        chain_list = []
+        for i in range(self.n_chains):
+            rng = np.random.default_rng(child_seeds[i])
+            chain_samples = self._run_single_chain(X, y, rng)
+            chain_list.append(chain_samples)
 
-        def neg_log_post_grad(params: np.ndarray) -> np.ndarray:
-            mu, delta = params
-            p_A = sigmoid(mu + delta)
-            p_B = sigmoid(mu)
-            g_mu = (k_A - n_A * p_A) + (k_B - n_B * p_B) - mu / sigma_mu**2
-            g_delta = (k_A - n_A * p_A) - delta / sigma_delta**2
-            return -np.array([g_mu, g_delta])
+        self.chains = np.array(chain_list)  # (n_chains, n_samples, 2)
+        self.samples = self.chains.reshape(-1, 2)  # pooled
 
-        result = minimize(
-            neg_log_post,
-            x0=np.array([0.0, 0.0]),
-            jac=neg_log_post_grad,
-            method="L-BFGS-B",
-        )
-        mu_map, delta_map = result.x
-
-        # Analytical Hessian of negative log-posterior at MAP
-        p_A_map = sigmoid(mu_map + delta_map)
-        p_B_map = sigmoid(mu_map)
-        w_A = p_A_map * (1 - p_A_map)
-        w_B = p_B_map * (1 - p_B_map)
-
-        H = np.array(
-            [
-                [n_A * w_A + n_B * w_B + 1 / sigma_mu**2, n_A * w_A],
-                [n_A * w_A, n_A * w_A + 1 / sigma_delta**2],
-            ]
-        )
-        cov = np.linalg.inv(H)
-
-        # Sample from Gaussian posterior
-        samples = rng.multivariate_normal([mu_map, delta_map], cov, size=self.n_samples)
-        mu_s = samples[:, 0]
-        delta_A_s = samples[:, 1]
+        mu_s = self.samples[:, 0]
+        delta_A_s = self.samples[:, 1]
+        self.delta_A_samples = delta_A_s
 
         pA_s = sigmoid(mu_s + delta_A_s)
         pB_s = sigmoid(mu_s)
         Delta_s = pA_s - pB_s
 
-        self.delta_A_samples = delta_A_s
         self.delta_samples = Delta_s
 
         self.summary = PairedSummary(
@@ -240,6 +263,9 @@ class PairedBayesPropTest:
             **{"P(A > B)": float((Delta_s > 0).mean())},
             delta_A_posterior_mean=float(delta_A_s.mean()),
         )
+
+        # MCMC diagnostics
+        diag = self.mcmc_diagnostics()
 
         self.trace_summary = pd.DataFrame(
             {
@@ -253,30 +279,79 @@ class PairedBayesPropTest:
                     np.quantile(delta_A_s, 0.97),
                     np.quantile(mu_s, 0.97),
                 ],
-                "MAP": [delta_map, mu_map],
+                "R-hat": [diag.delta_A.r_hat, diag.mu.r_hat],
+                "ESS": [diag.delta_A.ess, diag.mu.ess],
             },
             index=["delta_A", "mu"],
         )
-
-        self.laplace = {
-            "map": np.array([mu_map, delta_map]),
-            "cov": cov,
-            "H": H,
-            "mu_samples": mu_s,
-            "delta_A_samples": delta_A_s,
-            "n_A": len(self.y_A_obs),
-            "k_A": int(self.y_A_obs.sum()),
-            "n_B": len(self.y_B_obs),
-            "k_B": int(self.y_B_obs.sum()),
-            "prior_sigma_delta": self.prior_sigma_delta,
-        }
 
         return self
 
     def _check_fitted(self) -> None:
         """Raise RuntimeError if the model has not been fitted yet."""
-        if self.laplace is None:
+        if self.samples is None:
             raise RuntimeError("Model has not been fitted yet. Call .fit() first.")
+
+    # ------------------------------------------------------------------ #
+    #  MCMC diagnostics
+    # ------------------------------------------------------------------ #
+
+    @staticmethod
+    def _r_hat(chains: np.ndarray) -> float:
+        """Gelman-Rubin R-hat for a single parameter.
+
+        Args:
+            chains: ``(n_chains, n_samples)`` array for one parameter.
+        """
+        m, n = chains.shape
+        chain_means = chains.mean(axis=1)
+        grand_mean = chain_means.mean()
+        B = n / (m - 1) * np.sum((chain_means - grand_mean) ** 2)
+        W = np.mean(chains.var(axis=1, ddof=1))
+        var_hat = (n - 1) / n * W + B / n
+        return float(np.sqrt(var_hat / W)) if W > 0 else float("nan")
+
+    @staticmethod
+    def _ess(chains: np.ndarray) -> float:
+        """Effective sample size (FFT-based autocorrelation estimate).
+
+        Args:
+            chains: ``(n_chains, n_samples)`` array for one parameter.
+        """
+        m, n = chains.shape
+        total = 0.0
+        for chain in chains:
+            x = chain - chain.mean()
+            # FFT-based autocorrelation
+            f = np.fft.fft(x, n=2 * n)
+            acf = np.fft.ifft(f * np.conj(f)).real[:n]
+            acf /= acf[0]
+            # Sum pairs until negative
+            for t in range(1, n - 1, 2):
+                rho_pair = acf[t] + (acf[t + 1] if t + 1 < n else 0.0)
+                if rho_pair < 0:
+                    break
+                total += rho_pair
+            total += 1.0  # for lag 0
+        avg_tau = total / m
+        return float(m * n / (2 * avg_tau - 1)) if avg_tau > 0.5 else float(m * n)
+
+    def mcmc_diagnostics(self) -> MCMCDiagnostics:
+        """Compute R-hat and ESS for each parameter.
+
+        Returns:
+            :class:`MCMCDiagnostics` with R-hat and ESS per parameter.
+        """
+        self._check_fitted()
+        param_names = ["mu", "delta_A"]
+        param_diags: dict[str, MCMCParamDiagnostic] = {}
+        for i, name in enumerate(param_names):
+            param_chains = self.chains[:, :, i]
+            param_diags[name] = MCMCParamDiagnostic(
+                r_hat=self._r_hat(param_chains),
+                ess=self._ess(param_chains),
+            )
+        return MCMCDiagnostics(**param_diags)
 
     # ------------------------------------------------------------------ #
     #  Hypothesis testing
@@ -289,8 +364,8 @@ class PairedBayesPropTest:
             null_value: The point null hypothesis value for delta_A.
 
         Returns:
-            :class:`SavageDickeyResult` with BF_01, BF_10, densities,
-            interpretation, and decision.
+            Dict with keys ``BF_01``, ``BF_10``, ``posterior_density_at_0``,
+            ``prior_density_at_0``, ``interpretation``, and ``decision``.
         """
         self._check_fitted()
 
@@ -344,8 +419,8 @@ class PairedBayesPropTest:
             prior_H0: Prior probability of H0 (default 0.5).
 
         Returns:
-            :class:`PosteriorProbH0Result` with posterior and prior odds
-            and model probabilities.
+            Dict with keys ``P(H0|data)``, ``P(H1|data)``,
+            ``prior_odds``, and ``posterior_odds``.
         """
         prior_odds = prior_H0 / (1 - prior_H0)
         posterior_odds = BF_01 * prior_odds
@@ -432,14 +507,14 @@ class PairedBayesPropTest:
         """Posterior predictive p-values for summary statistics.
 
         Returns:
-            Dict mapping statistic name to :class:`PPCStatistic`.
+            Dict mapping statistic name to ``{observed, p_value, status}``.
         """
         self._check_fitted()
 
         rng = np.random.default_rng(seed if seed is not None else self.seed)
 
-        mu_s = self.laplace["mu_samples"]
-        delta_s = self.laplace["delta_A_samples"]
+        mu_s = self.samples[:, 0]
+        delta_s = self.samples[:, 1]
         n = len(self.y_A_obs)
 
         p_A_s = sigmoid(mu_s + delta_s)
@@ -485,26 +560,76 @@ class PairedBayesPropTest:
     #  Plotting
     # ------------------------------------------------------------------ #
 
-    def plot_laplace_posterior(self, **kwargs: Any) -> None:
+    def plot_trace(self, **kwargs) -> None:
+        """Trace plots and autocorrelation for all chains."""
+        import matplotlib.pyplot as plt
+
+        self._check_fitted()
+        param_names = ["\u03bc", "\u03b4_A"]
+
+        figsize = kwargs.pop("figsize", (14, 8))
+        fig, axes = plt.subplots(2, 2, figsize=figsize)
+
+        for row, (name, idx) in enumerate(zip(param_names, [0, 1], strict=True)):
+            # Trace plot
+            ax = axes[row, 0]
+            for c in range(self.n_chains):
+                ax.plot(
+                    self.chains[c, :, idx],
+                    alpha=0.6,
+                    linewidth=0.5,
+                    label=f"Chain {c + 1}",
+                )
+            ax.set_xlabel("Iteration (post burn-in)")
+            ax.set_ylabel(name)
+            ax.set_title(f"Trace: {name}", fontweight="bold")
+            ax.legend(fontsize=7, loc="upper right")
+            ax.grid(alpha=0.3)
+
+            # ACF
+            ax2 = axes[row, 1]
+            max_lag = min(100, self.chains.shape[1] // 2)
+            for c in range(self.n_chains):
+                x = self.chains[c, :, idx]
+                x = x - x.mean()
+                acf_full = np.correlate(x, x, mode="full")
+                acf_full = acf_full[len(x) - 1 :]
+                acf_full /= acf_full[0]
+                ax2.plot(acf_full[:max_lag], alpha=0.6, linewidth=0.8)
+            ax2.axhline(0, color="gray", linestyle="--", alpha=0.5)
+            ax2.set_xlabel("Lag")
+            ax2.set_ylabel("ACF")
+            ax2.set_title(f"Autocorrelation: {name}", fontweight="bold")
+            ax2.grid(alpha=0.3)
+
+        fig.suptitle(
+            kwargs.pop("title", "MCMC Diagnostics (PG Gibbs)"),
+            fontsize=13,
+            fontweight="bold",
+            y=1.02,
+        )
+        plt.tight_layout()
+        plt.show()
+
+    def plot_posteriors(self, **kwargs: Any) -> None:
         """Two-panel posterior plot: overlaid p_A / p_B and Δ = p_A − p_B.
 
         The implied success probabilities ``p_A = σ(μ + δ_A)`` and
-        ``p_B = σ(μ)`` are computed from the Laplace posterior samples
-        and displayed as overlaid KDE densities in the left panel.
-        The right panel shows the difference Δ = p_A − p_B.
+        ``p_B = σ(μ)`` are computed from the pooled MCMC posterior
+        samples and displayed as overlaid KDE densities in the left
+        panel.  The right panel shows the difference Δ = p_A − p_B.
 
         Args:
             **kwargs: Accepts ``figsize`` (default ``(14, 5)``) and
-                ``title`` (default ``"Laplace Posterior (Pooled Binomial)"``).
+                ``title`` (default ``"PG Gibbs Posterior (Pooled Binomial)"``).
         """
         import matplotlib.pyplot as plt
 
         self._check_fitted()
-        assert self.laplace is not None
-        mu_s = self.laplace["mu_samples"]
-        delta_s = self.laplace["delta_A_samples"]
 
-        p_A_s = sigmoid(mu_s + delta_s)
+        mu_s = self.samples[:, 0]
+        delta_A_s = self.samples[:, 1]
+        p_A_s = sigmoid(mu_s + delta_A_s)
         p_B_s = sigmoid(mu_s)
         Delta_s = p_A_s - p_B_s
 
@@ -570,7 +695,7 @@ class PairedBayesPropTest:
         ax.grid(alpha=0.3)
 
         fig.suptitle(
-            kwargs.pop("suptitle", kwargs.pop("title", "Laplace Posterior (Pooled Binomial)")),
+            kwargs.pop("title", "PG Gibbs Posterior (Pooled Binomial)"),
             fontsize=13,
             fontweight="bold",
             y=1.02,
@@ -616,7 +741,7 @@ class PairedBayesPropTest:
         ax.set_xlabel(kwargs.pop("xlabel", "\u03b4_A (logit scale)"), fontsize=11)
         ax.set_ylabel(kwargs.pop("ylabel", "Density"), fontsize=11)
         ax.set_title(
-            kwargs.pop("title", "Posterior of \u03b4_A (Binomial)"),
+            kwargs.pop("title", "Posterior of \u03b4_A (PG Gibbs)"),
             fontsize=12,
             fontweight="bold",
         )
@@ -690,7 +815,7 @@ class PairedBayesPropTest:
         ax.set_xlabel(kwargs.pop("xlabel", "\u03b4_A (logit scale)"), fontsize=11)
         ax.set_ylabel(kwargs.pop("ylabel", "Density"), fontsize=11)
         ax.set_title(
-            kwargs.pop("title", "Savage-Dickey Test (Binomial)"),
+            kwargs.pop("title", "Savage-Dickey Test (PG Gibbs)"),
             fontsize=12,
             fontweight="bold",
         )
@@ -706,8 +831,8 @@ class PairedBayesPropTest:
         self._check_fitted()
         rng = np.random.default_rng(seed if seed is not None else self.seed)
 
-        mu_s = self.laplace["mu_samples"]
-        delta_s = self.laplace["delta_A_samples"]
+        mu_s = self.samples[:, 0]
+        delta_s = self.samples[:, 1]
         n = len(self.y_A_obs)
 
         p_A_s = sigmoid(mu_s + delta_s)
@@ -718,10 +843,9 @@ class PairedBayesPropTest:
         figsize = kwargs.pop("figsize", (18, 5))
         fig, axes = plt.subplots(1, 3, figsize=figsize)
 
-        # P(perfect) Model A
-        ax = axes[0]
         frac_A_rep = y_A_rep.mean(axis=1)
         frac_A_obs = self.y_A_obs.mean()
+        ax = axes[0]
         ax.hist(
             frac_A_rep,
             bins=40,
@@ -744,10 +868,9 @@ class PairedBayesPropTest:
         ax.legend(fontsize=9)
         ax.grid(alpha=0.3)
 
-        # P(perfect) Model B
-        ax = axes[1]
         frac_B_rep = y_B_rep.mean(axis=1)
         frac_B_obs = self.y_B_obs.mean()
+        ax = axes[1]
         ax.hist(
             frac_B_rep,
             bins=40,
@@ -770,10 +893,9 @@ class PairedBayesPropTest:
         ax.legend(fontsize=9)
         ax.grid(alpha=0.3)
 
-        # Rate difference
-        ax = axes[2]
         diff_rep = frac_A_rep - frac_B_rep
         diff_obs = frac_A_obs - frac_B_obs
+        ax = axes[2]
         ax.hist(
             diff_rep,
             bins=40,
@@ -798,74 +920,10 @@ class PairedBayesPropTest:
         ax.grid(alpha=0.3)
 
         fig.suptitle(
-            kwargs.pop(
-                "suptitle",
-                kwargs.pop("title", "Posterior Predictive Checks (Laplace Binomial)"),
-            ),
+            kwargs.pop("title", "Posterior Predictive Checks (PG Gibbs)"),
             fontsize=14,
             fontweight="bold",
             y=1.02,
-        )
-        plt.tight_layout()
-        plt.show()
-
-    def plot_sensitivity(self, prior_H0: float = 0.5, **kwargs) -> None:
-        """Two-panel sensitivity: P(H0|data) vs prior P(H0), and slab-width sweep."""
-        import matplotlib.pyplot as plt
-
-        bf = self.savage_dickey_test()
-
-        figsize = kwargs.pop("figsize", (14, 5))
-        fig, axes = plt.subplots(1, 2, figsize=figsize)
-
-        # Left: P(H0|data) vs prior P(H0)
-        ax = axes[0]
-        prior_grid = np.linspace(0.01, 0.99, 200)
-        p_h0_grid = [self.posterior_probability_H0(bf.BF_01, p).p_H0 for p in prior_grid]
-        bf10 = bf.BF_10
-        bf_label = f"log\u2081\u2080BF\u2081\u2080={np.log10(bf10):.0f}" if bf10 > 1e4 else f"BF\u2081\u2080={bf10:.1f}"
-        ax.plot(prior_grid, p_h0_grid, linewidth=2, label=bf_label)
-        ax.axhline(0.05, color="red", linestyle="--", alpha=0.5, label="P(H\u2080)=0.05")
-        ax.axvline(prior_H0, color="gray", linestyle=":", alpha=0.5)
-        ax.set_xlabel("Prior P(H\u2080)")
-        ax.set_ylabel("Posterior P(H\u2080 | data)")
-        ax.set_title("Sensitivity: P(H\u2080 | data) vs Prior P(H\u2080)", fontweight="bold")
-        ax.legend(fontsize=9)
-        ax.grid(alpha=0.3)
-        ax.set_xlim(0, 1)
-        ax.set_ylim(0, 1)
-
-        # Right: BF_10 vs slab width sigma_s
-        ax2 = axes[1]
-        sigma_grid = np.linspace(0.25, 5.0, 100)
-        kde = gaussian_kde(self.delta_A_samples)
-        post_at_0 = float(kde(0.0)[0])
-        bf10_vals = [norm.pdf(0, 0, s) / post_at_0 for s in sigma_grid]
-        ax2.plot(sigma_grid, bf10_vals, linewidth=2)
-        ax2.axhline(3, color="red", linestyle="--", alpha=0.5, label="BF\u2081\u2080 = 3")
-        ax2.axhline(1, color="gray", linestyle=":", alpha=0.5, label="BF\u2081\u2080 = 1")
-        ax2.axvline(
-            self.prior_sigma_delta,
-            color="gray",
-            linestyle="--",
-            alpha=0.3,
-            label=f"\u03c3_s = {self.prior_sigma_delta} (used)",
-        )
-        ax2.set_xlabel("Slab width \u03c3_s")
-        ax2.set_ylabel("BF\u2081\u2080")
-        ax2.set_title("Sensitivity: BF\u2081\u2080 vs Slab Width", fontweight="bold")
-        ax2.set_yscale("log")
-        ax2.legend(fontsize=9)
-        ax2.grid(alpha=0.3)
-
-        fig.suptitle(
-            kwargs.pop(
-                "suptitle",
-                kwargs.pop("title", "Jeffreys-Lindley Sensitivity (Binomial)"),
-            ),
-            fontsize=13,
-            fontweight="bold",
-            y=1.04,
         )
         plt.tight_layout()
         plt.show()
@@ -875,27 +933,32 @@ class PairedBayesPropTest:
     # ------------------------------------------------------------------ #
 
     def print_summary(self) -> None:
-        """Print posterior summary, Savage-Dickey test, and PPC p-values."""
+        """Print posterior summary, MCMC diagnostics, Savage-Dickey test, and PPC."""
         self._check_fitted()
 
-        mu_map, delta_map = self.laplace["map"]
-        cov = self.laplace["cov"]
-
-        # Laplace posterior info
         s = self.summary
+        diag = self.mcmc_diagnostics()
         verdict = "A wins" if s.p_A_greater_B > 0.95 else ("Tied" if s.p_A_greater_B > 0.5 else "B wins")
-        print("Laplace posterior summary")
-        print("=" * 60)
-        print(f"  MAP: \u03bc={mu_map:.4f}, \u03b4_A={delta_map:.4f}")
-        print(f"  Posterior sd: \u03bc={np.sqrt(cov[0, 0]):.4f}, \u03b4_A={np.sqrt(cov[1, 1]):.4f}")
-        print(f"  Correlation: {cov[0, 1] / np.sqrt(cov[0, 0] * cov[1, 1]):.3f}")
-        print(f"  Mean \u0394 (prob scale):  {s.mean_delta:.4f}")
-        print(f"  95% CI:               [{s.ci_95.lower:.4f}, {s.ci_95.upper:.4f}]")
-        print(f"  P(A > B):             {s.p_A_greater_B:.4f}")
-        print(f"  \u03b4_A (logit scale):    {s.delta_A_posterior_mean:.4f}")
-        print(f"  Verdict:              {verdict}")
 
-        # Savage-Dickey
+        print("PG Gibbs posterior summary")
+        print("=" * 60)
+        print(f"  Chains: {self.n_chains}, Iterations: {self.n_iter}, Burn-in: {self.burn_in}")
+        print(f"  Total post-warmup samples: {len(self.delta_A_samples)}")
+        print(f"  \u03b4_A posterior mean:  {s.delta_A_posterior_mean:.4f}")
+        print(f"  Mean \u0394 (prob scale): {s.mean_delta:.4f}")
+        print(f"  95% CI:              [{s.ci_95.lower:.4f}, {s.ci_95.upper:.4f}]")
+        print(f"  P(A > B):            {s.p_A_greater_B:.4f}")
+        print(f"  Verdict:             {verdict}")
+
+        print()
+        print("MCMC diagnostics")
+        print("=" * 60)
+        for name, d in diag.model_dump().items():
+            r_hat = d["r_hat"]
+            ess = d["ess"]
+            status = "OK" if 0.99 <= r_hat <= 1.05 else "WARN"
+            print(f"  {name}: R-hat={r_hat:.4f}, ESS={ess:.0f}  {status}")
+
         bf = self.savage_dickey_test()
         print()
         print("Savage-Dickey Bayes Factor: H0 (\u03b4_A = 0) vs H1 (\u03b4_A \u2260 0)")
@@ -908,7 +971,6 @@ class PairedBayesPropTest:
         print(f"  \u2192 {bf.interpretation}")
         print(f"  \u2192 Decision: {bf.decision}")
 
-        # Posterior probability of H0
         post = self.posterior_probability_H0(bf.BF_01)
         print()
         print("Posterior model probabilities (prior P(H0) = 0.5)")
@@ -916,7 +978,6 @@ class PairedBayesPropTest:
         print(f"  P(H0|data): {post.p_H0:.2e}")
         print(f"  P(H1|data): {post.p_H1:.6f}")
 
-        # PPC p-values
         ppc = self.ppc_pvalues()
         print()
         print("Posterior Predictive p-values")
@@ -926,19 +987,18 @@ class PairedBayesPropTest:
         for stat, vals in ppc.items():
             print(f"  {stat:<20} {vals.observed:>10.4f} {vals.p_value:>10.3f} {vals.status:>8}")
 
-        # Trace summary
         print()
-        print("Laplace trace diagnostics")
+        print("Trace summary")
         print("=" * 60)
         print(self.trace_summary.to_string())
 
     # ------------------------------------------------------------------ #
-    #  Multi-model comparison (class method)
+    #  Multi-model comparison
     # ------------------------------------------------------------------ #
 
     @staticmethod
     def plot_forest(
-        results: dict[str, "PairedBayesPropTest"],
+        results: dict[str, "PairedBayesPropTestPG"],
         label_A: str = "Model A",
         label_B: str = "Model B",
         **kwargs,
@@ -961,7 +1021,13 @@ class PairedBayesPropTest:
 
         ax = axes[0]
         for i, (m, ci_l, ci_h, col) in enumerate(zip(means, ci_lows, ci_highs, colors, strict=False)):
-            ax.plot([ci_l, ci_h], [i, i], color=col, linewidth=2.5, solid_capstyle="round")
+            ax.plot(
+                [ci_l, ci_h],
+                [i, i],
+                color=col,
+                linewidth=2.5,
+                solid_capstyle="round",
+            )
             ax.plot(m, i, "o", color=col, markersize=8, zorder=5)
         ax.axvline(0, color="gray", linestyle="--", linewidth=1, alpha=0.7)
         ax.set_yticks(y_pos)
@@ -998,8 +1064,8 @@ class PairedBayesPropTest:
         )
         fig.suptitle(
             kwargs.pop(
-                "suptitle",
-                kwargs.pop("title", f"{label_A} vs {label_B} \u2014 Pooled Binomial Comparison"),
+                "title",
+                f"{label_A} vs {label_B} \u2014 PG Gibbs Comparison",
             ),
             fontsize=14,
             fontweight="bold",
@@ -1009,7 +1075,9 @@ class PairedBayesPropTest:
         plt.show()
 
     @staticmethod
-    def print_comparison_table(results: dict[str, "PairedBayesPropTest"]) -> None:
+    def print_comparison_table(
+        results: dict[str, "PairedBayesPropTestPG"],
+    ) -> None:
         """Print a formatted comparison table across metrics."""
         print("=" * 80)
         print(f"{'Metric':<25} {'Mean \u0394':>8} {'95% CI':>20} {'P(A>B)':>8} {'Verdict':>12}")

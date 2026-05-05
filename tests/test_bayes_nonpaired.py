@@ -1,4 +1,4 @@
-"""Unit tests for bayesAB.resources.bayes_nonpaired module."""
+"""Unit tests for bayesprop.resources.bayes_nonpaired module."""
 
 from __future__ import annotations
 
@@ -9,13 +9,13 @@ import pytest
 
 matplotlib.use("Agg")
 
-from bayesAB.resources.bayes_nonpaired import (
+from bayesprop.resources.bayes_nonpaired import (
     NonPairedBayesPropTest,
     _format_bf,
     beta_diff_pdf,
     descriptive_summary,
 )
-from bayesAB.resources.data_schemas import (
+from bayesprop.resources.data_schemas import (
     HypothesisDecision,
     NonPairedSummary,
     NonPairedTestResult,
@@ -431,7 +431,7 @@ class TestNonPairedDGPRecovery:
     )
     def test_true_delta_in_ci(self, theta_A: float, theta_B: float, N: int) -> None:
         """True Δ = θ_A − θ_B should fall inside the 95% CI."""
-        from bayesAB.utils.utils import simulate_nonpaired_scores
+        from bayesprop.utils.utils import simulate_nonpaired_scores
 
         sim = simulate_nonpaired_scores(N=N, theta_A=theta_A, theta_B=theta_B, seed=42)
         model = NonPairedBayesPropTest(seed=42, n_samples=50_000).fit(sim.y_A, sim.y_B)
@@ -444,7 +444,7 @@ class TestNonPairedDGPRecovery:
 
     def test_theta_posteriors_cover_truth(self) -> None:
         """Individual θ_A and θ_B posterior means should be close to truth."""
-        from bayesAB.utils.utils import simulate_nonpaired_scores
+        from bayesprop.utils.utils import simulate_nonpaired_scores
 
         theta_A, theta_B = 0.80, 0.55
         sim = simulate_nonpaired_scores(N=300, theta_A=theta_A, theta_B=theta_B, seed=7)
@@ -455,7 +455,7 @@ class TestNonPairedDGPRecovery:
 
     def test_null_effect_not_rejected(self) -> None:
         """Under H₀ (θ_A = θ_B), BF should not reject."""
-        from bayesAB.utils.utils import simulate_nonpaired_scores
+        from bayesprop.utils.utils import simulate_nonpaired_scores
 
         sim = simulate_nonpaired_scores(N=200, theta_A=0.65, theta_B=0.65, seed=42)
         model = NonPairedBayesPropTest(seed=42, n_samples=50_000).fit(sim.y_A, sim.y_B)
@@ -464,7 +464,7 @@ class TestNonPairedDGPRecovery:
 
     def test_large_effect_rejected(self) -> None:
         """With a large true effect (Δ=0.35), BF should reject H₀."""
-        from bayesAB.utils.utils import simulate_nonpaired_scores
+        from bayesprop.utils.utils import simulate_nonpaired_scores
 
         sim = simulate_nonpaired_scores(N=200, theta_A=0.85, theta_B=0.50, seed=42)
         model = NonPairedBayesPropTest(seed=42, n_samples=50_000).fit(sim.y_A, sim.y_B)
@@ -474,7 +474,7 @@ class TestNonPairedDGPRecovery:
 
     def test_mean_delta_close_to_truth(self) -> None:
         """Posterior mean Δ should be within 0.08 of the true value."""
-        from bayesAB.utils.utils import simulate_nonpaired_scores
+        from bayesprop.utils.utils import simulate_nonpaired_scores
 
         theta_A, theta_B = 0.75, 0.60
         sim = simulate_nonpaired_scores(N=300, theta_A=theta_A, theta_B=theta_B, seed=99)

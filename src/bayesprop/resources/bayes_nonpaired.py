@@ -28,7 +28,7 @@ import pandas as pd
 from scipy.special import betainc, betaln
 from scipy.stats import gaussian_kde
 
-from bayesAB.resources.data_schemas import (
+from bayesprop.resources.data_schemas import (
     BetaParams,
     CredibleInterval,
     DecisionRuleType,

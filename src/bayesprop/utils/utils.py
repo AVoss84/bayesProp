@@ -7,8 +7,8 @@ import numpy as np
 import numpy.typing as npt
 from scipy.interpolate import interp1d
 
-from bayesAB.resources.bayes_nonpaired import beta_diff_pdf
-from bayesAB.resources.data_schemas import (
+from bayesprop.resources.bayes_nonpaired import beta_diff_pdf
+from bayesprop.resources.data_schemas import (
     DecisionRuleType,
     NonPairedSimResult,
     NonPairedTrueParams,
@@ -278,7 +278,7 @@ def _make_decision_fn(
 
         # ROPE — need model fitting for delta_samples
         def _nonpaired_rope(y_A: np.ndarray, y_B: np.ndarray) -> bool:
-            from bayesAB.resources.bayes_nonpaired import NonPairedBayesPropTest
+            from bayesprop.resources.bayes_nonpaired import NonPairedBayesPropTest
 
             model = NonPairedBayesPropTest(alpha0=alpha0, beta0=beta0, seed=seed).fit(y_A, y_B)
             result = model.rope_test(rope=rope, ci_mass=ci_mass)
@@ -290,7 +290,7 @@ def _make_decision_fn(
     if design == "paired":
 
         def _paired_decide(y_A: np.ndarray, y_B: np.ndarray) -> bool:
-            from bayesAB.resources.bayes_paired_pg import PairedBayesPropTestPG
+            from bayesprop.resources.bayes_paired_pg import PairedBayesPropTestPG
 
             model = PairedBayesPropTestPG(
                 prior_sigma_delta=prior_sigma_delta,

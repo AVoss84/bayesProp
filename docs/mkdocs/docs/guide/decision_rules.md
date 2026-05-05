@@ -3,7 +3,7 @@
 ## Overview
 
 After fitting a model, you need to **decide** whether model A differs from model B.
-`bayesAB` provides three complementary decision frameworks, all accessible via a
+`bayesprop` provides three complementary decision frameworks, all accessible via a
 single `model.decide()` call.
 
 | Framework | What it tests | Key output |

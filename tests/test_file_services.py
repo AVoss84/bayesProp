@@ -1,4 +1,4 @@
-"""Unit tests for bayesAB.services.file module."""
+"""Unit tests for bayesprop.services.file module."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ import pandas as pd
 import pytest
 import yaml
 
-from bayesAB.services.file import CSVService, JSONService, YAMLService
+from bayesprop.services.file import CSVService, JSONService, YAMLService
 
 
 @pytest.fixture

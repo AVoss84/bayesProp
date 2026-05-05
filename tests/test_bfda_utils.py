@@ -1,4 +1,4 @@
-"""Unit tests for bayesAB.utils.utils module."""
+"""Unit tests for bayesprop.utils.utils module."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ import pytest
 
 matplotlib.use("Agg")
 
-from bayesAB.utils.utils import (
+from bayesprop.utils.utils import (
     bf10_to_ph0,
     bfda_power_curve,
     bfda_simulate,

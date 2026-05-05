@@ -1,15 +1,15 @@
 # Bayesian A/B Testing for Proportions
 
-[![TestPyPI](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Ftest.pypi.org%2Fpypi%2FbayesAB%2Fjson&query=%24.info.version&prefix=v&logo=pypi&logoColor=white&label=TestPyPI)](https://test.pypi.org/project/bayesAB/)
-[![Documentation](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://avoss84.github.io/bayesAB/)
+[![TestPyPI](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Ftest.pypi.org%2Fpypi%2FBayesProp%2Fjson&query=%24.info.version&prefix=v&logo=pypi&logoColor=white&label=TestPyPI)](https://test.pypi.org/project/BayesProp/)
+[![Documentation](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://avoss84.github.io/bayesProp/)
 [![Python](https://img.shields.io/badge/python-%E2%89%A53.13-blue?logo=python&logoColor=white)](https://www.python.org/)
-[![Tests](https://github.com/AVoss84/bayesAB/actions/workflows/tests.yml/badge.svg)](https://github.com/AVoss84/bayesAB/actions/workflows/tests.yml)
-[![codecov](https://raw.githubusercontent.com/AVoss84/bayesAB/badges/coverage-badge.svg)](https://github.com/AVoss84/bayesAB/actions/workflows/tests.yml)
+[![Tests](https://github.com/AVoss84/bayesProp/actions/workflows/tests.yml/badge.svg)](https://github.com/AVoss84/bayesProp/actions/workflows/tests.yml)
+[![codecov](https://raw.githubusercontent.com/AVoss84/bayesProp/badges/coverage-badge.svg)](https://github.com/AVoss84/bayesProp/actions/workflows/tests.yml)
 
 A Python package for **Bayesian hypothesis testing** of binary (pass/fail) outcomes in A/B experiments.
 It provides three complementary models, Savage–Dickey Bayes factors, posterior predictive checks,
 Bayes Factor Design Analysis (BFDA) for sample-size planning, and publication-ready plots.
-Please check out our [Getting Started](https://avoss84.github.io/bayesAB/getting_started/) guide for installation and quick examples.
+Please check out our [Getting Started](https://avoss84.github.io/bayesProp/getting_started/) guide for installation and quick examples.
 
 ## Models
 
@@ -22,8 +22,8 @@ Please check out our [Getting Started](https://avoss84.github.io/bayesAB/getting
 ## Quick start
 
 ```python
-from bayesAB.resources.bayes_paired_pg import PairedBayesPropTestPG
-from bayesAB.utils.utils import simulate_paired_scores
+from bayesprop.resources.bayes_paired_pg import PairedBayesPropTestPG
+from bayesprop.utils.utils import simulate_paired_scores
 
 # Simulate paired binary data
 sim = simulate_paired_scores(N=200, delta_A=0.5, seed=42)
@@ -51,7 +51,7 @@ model.plot_savage_dickey()
 ├── data/                      # evaluation datasets
 ├── docs/                      # model derivations & MkDocs site
 ├── src
-│   ├── bayesAB
+│   ├── bayesprop
 │   │   ├── config/            # global_config, YAML configs
 │   │   ├── resources/
 │   │   │   ├── bayes_nonpaired.py      # NonPairedBayesPropTest
@@ -79,20 +79,20 @@ model.plot_savage_dickey()
 ## Installation
 
 ```bash
-pip install bayesAB
+pip install bayesprop
 ```
 
 Or with [uv](https://github.com/astral-sh/uv):
 
 ```bash
-uv pip install bayesAB
+uv pip install bayesprop
 ```
 
 For development (from source):
 
 ```bash
-git clone https://github.com/AVoss84/bayesAB.git
-cd bayesAB
+git clone https://github.com/AVoss84/bayesProp.git
+cd bayesprop
 uv venv --python 3.13
 uv sync
 source .venv/bin/activate

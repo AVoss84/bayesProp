@@ -1,4 +1,4 @@
-"""Unit tests for bayesAB.resources.data_schemas module."""
+"""Unit tests for bayesprop.resources.data_schemas module."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 from pydantic import ValidationError
 
-from bayesAB.resources.data_schemas import (
+from bayesprop.resources.data_schemas import (
     BetaParams,
     CredibleInterval,
     HypothesisDecision,

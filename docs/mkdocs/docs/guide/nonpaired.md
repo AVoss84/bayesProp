@@ -89,8 +89,8 @@ Bayes factor is fully deterministic.
 ### 1. Simulate data
 
 ```python
-from bayesAB.utils.utils import simulate_nonpaired_scores
-from bayesAB.resources.bayes_nonpaired import NonPairedBayesPropTest
+from bayesprop.utils.utils import simulate_nonpaired_scores
+from bayesprop.resources.bayes_nonpaired import NonPairedBayesPropTest
 
 sim = simulate_nonpaired_scores(N=150, theta_A=0.80, theta_B=0.60, seed=42)
 
@@ -140,7 +140,7 @@ Visualise the exact density of $\Delta$ alongside MC samples:
 ```python
 import numpy as np
 import matplotlib.pyplot as plt
-from bayesAB.resources.bayes_nonpaired import beta_diff_pdf
+from bayesprop.resources.bayes_nonpaired import beta_diff_pdf
 
 z_grid = np.linspace(-0.5, 0.8, 500)
 
@@ -263,7 +263,7 @@ true effect size. This plot shows how precision improves:
 ```python
 import numpy as np
 import matplotlib.pyplot as plt
-from bayesAB.resources.bayes_nonpaired import beta_diff_pdf
+from bayesprop.resources.bayes_nonpaired import beta_diff_pdf
 
 z_grid = np.linspace(-0.6, 0.8, 400)
 fig, ax = plt.subplots(figsize=(9, 5))
@@ -312,7 +312,7 @@ Use Bayes Factor Design Analysis to determine how many observations you need
 for a given effect size. See the [BFDA guide](bfda.md) for details.
 
 ```python
-from bayesAB.utils.utils import bfda_power_curve, plot_bfda_power
+from bayesprop.utils.utils import bfda_power_curve, plot_bfda_power
 
 theta_A_hat = y_A.mean()
 theta_B_hat = y_B.mean()

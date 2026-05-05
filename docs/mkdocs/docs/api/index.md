@@ -1,6 +1,6 @@
 # API Reference
 
-Full API documentation for all `bayesAB` modules, auto-generated
+Full API documentation for all `bayesprop` modules, auto-generated
 from source code docstrings.
 
 ## Modules

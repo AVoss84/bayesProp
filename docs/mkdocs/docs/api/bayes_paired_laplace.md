@@ -2,4 +2,4 @@
 
 Paired logistic model with MAP + Hessian (Laplace) posterior inference.
 
-::: bayesAB.resources.bayes_paired_laplace
+::: bayesprop.resources.bayes_paired_laplace

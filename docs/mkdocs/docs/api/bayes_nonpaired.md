@@ -2,4 +2,4 @@
 
 Independent Beta-Bernoulli A/B test with exact Savage-Dickey Bayes factor.
 
-::: bayesAB.resources.bayes_nonpaired
+::: bayesprop.resources.bayes_nonpaired

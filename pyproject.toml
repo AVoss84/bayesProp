@@ -3,7 +3,7 @@ requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "bayesAB"
+name = "BayesProp"
 version = "0.1.0.1"
 description = "Bayesian A/B testing for proportions"
 readme = "README.md"
@@ -24,10 +24,10 @@ authors = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/AVoss84/bayesAB"
-Documentation = "https://avoss84.github.io/bayesAB/"
-Repository = "https://github.com/AVoss84/bayesAB"
-Issues = "https://github.com/AVoss84/bayesAB/issues"
+Homepage = "https://github.com/AVoss84/bayesProp"
+Documentation = "https://avoss84.github.io/bayesProp/"
+Repository = "https://github.com/AVoss84/bayesProp"
+Issues = "https://github.com/AVoss84/bayesProp/issues"
 
 [dependency-groups]
 dev = [
@@ -61,7 +61,7 @@ package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["bayesAB*"]
+include = ["bayesprop*"]
 
 [tool.mypy]
 python_version = "3.13"
@@ -85,7 +85,7 @@ markers = [
 ]
 
 [tool.coverage.run]
-source = ["src/bayesAB"]
+source = ["src/bayesprop"]
 
 [tool.coverage.report]
 skip_covered = true

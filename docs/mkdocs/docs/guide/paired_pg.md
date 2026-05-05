@@ -107,9 +107,9 @@ $$
 
 ```python
 import numpy as np
-from bayesAB.resources.bayes_paired_pg import PairedBayesPropTestPG, sigmoid
-from bayesAB.resources.bayes_paired_laplace import PairedBayesPropTest
-from bayesAB.utils.utils import simulate_paired_scores
+from bayesprop.resources.bayes_paired_pg import PairedBayesPropTestPG, sigmoid
+from bayesprop.resources.bayes_paired_laplace import PairedBayesPropTest
+from bayesprop.utils.utils import simulate_paired_scores
 
 sim = simulate_paired_scores(N=200, delta_A=0.5, sigma_theta=0.0, seed=42)
 
@@ -350,7 +350,7 @@ for label, m in [("PG Gibbs", pg_model), ("Laplace", laplace_model)]:
 ## BFDA sample-size planning
 
 ```python
-from bayesAB.utils.utils import (
+from bayesprop.utils.utils import (
     bfda_power_curve,
     plot_bfda_power,
     plot_bfda_sensitivity,

@@ -1,4 +1,4 @@
-# bayesAB
+# bayesprop
 
 **Bayesian A/B testing for proportions** — a Python package for comparing two models (or treatments) using binarized pass/fail scores with fully Bayesian inference, Bayes factor hypothesis testing, and sample-size planning.
 
@@ -16,8 +16,8 @@
 ## Quick example
 
 ```python
-from bayesAB.resources.bayes_nonpaired import NonPairedBayesPropTest
-from bayesAB.utils.utils import simulate_nonpaired_scores
+from bayesprop.resources.bayes_nonpaired import NonPairedBayesPropTest
+from bayesprop.utils.utils import simulate_nonpaired_scores
 
 sim = simulate_nonpaired_scores(N=100, theta_A=0.85, theta_B=0.70, seed=42)
 y_A, y_B = sim.y_A, sim.y_B

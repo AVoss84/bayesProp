@@ -106,8 +106,8 @@ For exact posterior inference with convergence diagnostics, see
 ### 1. Simulate paired data
 
 ```python
-from bayesAB.resources.bayes_paired_laplace import PairedBayesPropTest
-from bayesAB.utils.utils import simulate_paired_scores
+from bayesprop.resources.bayes_paired_laplace import PairedBayesPropTest
+from bayesprop.utils.utils import simulate_paired_scores
 
 sim = simulate_paired_scores(N=150, delta_A=0.8, sigma_theta=0.0, seed=42)
 
@@ -354,7 +354,7 @@ if b + c > 0:
 ## BFDA sample-size planning
 
 ```python
-from bayesAB.utils.utils import bfda_power_curve, plot_bfda_power
+from bayesprop.utils.utils import bfda_power_curve, plot_bfda_power
 
 theta_A_hat = model.y_A_obs.mean()
 theta_B_hat = model.y_B_obs.mean()

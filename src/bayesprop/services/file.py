@@ -7,8 +7,8 @@ from typing import Any, Dict, List, Optional, Union
 import pandas as pd
 import yaml
 
-from bayesAB.config import global_config as glob
-from bayesAB.services.blueprint_file import BaseService
+from bayesprop.config import global_config as glob
+from bayesprop.services.blueprint_file import BaseService
 
 
 class CSVService(BaseService):

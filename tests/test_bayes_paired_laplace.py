@@ -1,4 +1,4 @@
-"""Unit tests for bayesAB.resources.bayes_paired_laplace module."""
+"""Unit tests for bayesprop.resources.bayes_paired_laplace module."""
 
 from __future__ import annotations
 
@@ -9,12 +9,12 @@ import pytest
 
 matplotlib.use("Agg")
 
-from bayesAB.resources.bayes_paired_laplace import (
+from bayesprop.resources.bayes_paired_laplace import (
     PairedBayesPropTest,
     _format_bf,
     sigmoid,
 )
-from bayesAB.resources.data_schemas import (
+from bayesprop.resources.data_schemas import (
     HypothesisDecision,
     PairedSummary,
     PosteriorProbH0Result,
@@ -281,7 +281,7 @@ class TestPairedLaplaceStatic:
     """Tests for PairedBayesPropTest static methods."""
 
     def test_simulate_paired_scores(self) -> None:
-        from bayesAB.utils.utils import simulate_paired_scores
+        from bayesprop.utils.utils import simulate_paired_scores
 
         sim = simulate_paired_scores(N=50, seed=0)
         assert hasattr(sim, "y_A")
@@ -331,7 +331,7 @@ class TestPairedLaplaceDGPRecovery:
     )
     def test_delta_A_posterior_covers_truth(self, mu: float, delta_A: float, N: int) -> None:
         """Logit-scale δ_A posterior samples should cover the true value (95% CI)."""
-        from bayesAB.utils.utils import simulate_paired_scores
+        from bayesprop.utils.utils import simulate_paired_scores
 
         sim = simulate_paired_scores(N=N, mu=mu, delta_A=delta_A, seed=42)
         model = PairedBayesPropTest(seed=42, n_samples=10_000).fit(sim.y_A, sim.y_B)
@@ -343,7 +343,7 @@ class TestPairedLaplaceDGPRecovery:
 
     def test_mean_delta_A_close_to_truth(self) -> None:
         """Posterior mean of logit-scale δ_A should be close to the true value."""
-        from bayesAB.utils.utils import simulate_paired_scores
+        from bayesprop.utils.utils import simulate_paired_scores
 
         delta_A = 0.6
         sim = simulate_paired_scores(N=500, delta_A=delta_A, seed=99)
@@ -353,7 +353,7 @@ class TestPairedLaplaceDGPRecovery:
 
     def test_prob_delta_covers_truth(self) -> None:
         """Probability-scale Δ should cover the true value derived from the DGP."""
-        from bayesAB.utils.utils import simulate_paired_scores
+        from bayesprop.utils.utils import simulate_paired_scores
 
         mu, delta_A = 0.0, 0.5
         true_delta_prob = sigmoid(mu + delta_A) - sigmoid(mu)
@@ -366,7 +366,7 @@ class TestPairedLaplaceDGPRecovery:
 
     def test_null_effect_not_rejected(self) -> None:
         """Under H₀ (δ_A = 0), BF should not reject."""
-        from bayesAB.utils.utils import simulate_paired_scores
+        from bayesprop.utils.utils import simulate_paired_scores
 
         sim = simulate_paired_scores(N=300, delta_A=0.0, sigma_theta=2.0, seed=42)
         model = PairedBayesPropTest(seed=42, n_samples=10_000).fit(sim.y_A, sim.y_B)
@@ -375,7 +375,7 @@ class TestPairedLaplaceDGPRecovery:
 
     def test_large_effect_rejected(self) -> None:
         """With a large true effect (δ_A=1.5), BF should reject H₀."""
-        from bayesAB.utils.utils import simulate_paired_scores
+        from bayesprop.utils.utils import simulate_paired_scores
 
         sim = simulate_paired_scores(N=300, delta_A=1.5, sigma_theta=2.0, seed=42)
         model = PairedBayesPropTest(seed=42, n_samples=10_000).fit(sim.y_A, sim.y_B)
@@ -385,7 +385,7 @@ class TestPairedLaplaceDGPRecovery:
 
     def test_map_estimate_recovers_delta(self) -> None:
         """Laplace MAP estimate for δ_A should be close to the true value."""
-        from bayesAB.utils.utils import simulate_paired_scores
+        from bayesprop.utils.utils import simulate_paired_scores
 
         delta_A = 0.8
         sim = simulate_paired_scores(N=500, delta_A=delta_A, seed=7)
