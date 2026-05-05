@@ -19,9 +19,6 @@ Please check out our [Getting Started](https://avoss84.github.io/bayesAB/getting
 | **Paired Logistic (Laplace)** | `PairedBayesPropTest` | MAP + Laplace approximation | Paired scores, large *n*, fast iteration |
 | **Paired Logistic (Pólya–Gamma)** | `PairedBayesPropTestPG` | Exact Gibbs sampling | Paired scores, small *n*, exact posterior |
 
-All models return **Pydantic data contracts** (`PairedSummary`, `SavageDickeyResult`, `PPCStatistic`, etc.)
-for type-safe downstream use.
-
 ## Quick start
 
 ```python
