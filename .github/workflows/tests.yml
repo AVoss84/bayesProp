@@ -20,7 +20,8 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install -e ".[test]"
+          pip install --upgrade pip
+          pip install -e . --dependency-groups test
 
       - name: Run tests with coverage
         run: |
