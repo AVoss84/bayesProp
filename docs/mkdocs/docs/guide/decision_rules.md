@@ -119,7 +119,7 @@ to Lebesgue measure on \(\mathbb{R}\). The total prior is therefore
 **neither** purely discrete nor purely continuous — it is a mixed
 measure on \((\mathbb{R},\,\mathcal{B}(\mathbb{R}))\).
 
-### Posterior model probability
+### Posterior probability of the null hypothesis
 
 Under this prior, Bayes' theorem yields the posterior probability of the
 null model:
