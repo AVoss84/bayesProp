@@ -67,6 +67,38 @@ For a single Bernoulli observation $y_i \in \{0,1\}$ with
 $p_i = \sigma(\psi_i) = (1+e^{-\psi_i})^{-1}$, we have $b=1$ and $a = y_i$,
 giving $\kappa_i = y_i - \tfrac{1}{2}$.
 
+### Likelihood rewrite
+
+The full Bernoulli log-likelihood can be rewritten as:
+
+$$
+p(\mathbf{y} \mid \boldsymbol{\beta})
+= \prod_{i=1}^{2n} \frac{(e^{\psi_i})^{y_i}}{1 + e^{\psi_i}}
+= 2^{-2n}\prod_{i=1}^{2n}
+  \frac{e^{\kappa_i \psi_i}}{\cosh(\psi_i / 2)}
+$$
+
+Applying the PG integral identity to each factor
+$\cosh(\psi_i/2)^{-1}$ introduces latent variables
+$\omega_i \sim \text{PG}(1, 0)$ and yields a **conditionally Gaussian**
+augmented likelihood:
+
+$$
+p(\mathbf{y} \mid \boldsymbol{\beta}, \boldsymbol{\omega})
+\propto \exp\!\left(
+  -\tfrac{1}{2}\bigl(
+    \boldsymbol{\beta}^{\!\top} \mathbf{X}^{\top}
+    \boldsymbol{\Omega}\,\mathbf{X}\,\boldsymbol{\beta}
+    - 2\,\boldsymbol{\kappa}^{\top}\mathbf{X}\,\boldsymbol{\beta}
+  \bigr)
+\right)
+$$
+
+where $\boldsymbol{\Omega} = \operatorname{diag}(\omega_1, \dots, \omega_{2n})$.
+Combined with the Gaussian prior on $\boldsymbol{\beta}$, this gives
+closed-form full conditionals for both $\boldsymbol{\beta}$ and
+$\boldsymbol{\omega}$, which is the basis of the Gibbs sampler below.
+
 ### Stacked design
 
 We stack the $n$ paired observations into a $2n$-dimensional regression:
