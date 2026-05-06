@@ -59,16 +59,32 @@ The distribution of $\Delta = \theta_A - \theta_B$ is computed via
 **exact log-space convolution** of two Beta densities, not KDE. This avoids
 bandwidth selection issues and gives deterministic, reproducible results.
 
-Setting $\theta_A = \theta_B + z$, the density of $\Delta$ is:
+Because the two posteriors are independent, the density of $\Delta$ is the
+convolution of $f_{\theta_A \mid y}$ with the reflected density of
+$\theta_B \mid y$. Setting $\theta_A = \theta_B + z$, for $z \in (-1, 1)$:
 
 $$
-f_\Delta(z) = \int_{\max(0,z)}^{\min(1,1+z)}
-  f_{\theta_A}(x) \;\cdot\; f_{\theta_B}(x - z) \;\mathrm{d}x
+f_{\Delta \mid y}(z) = \int_{\max(0,\,z)}^{\min(1,\,1+z)}
+  f_{\theta_A \mid y}(x) \;\cdot\; f_{\theta_B \mid y}(x - z) \;\mathrm{d}x
 $$
 
-where $f_{\theta_A}$ and $f_{\theta_B}$ are the posterior Beta densities.
-The integral is evaluated numerically on a fine grid with the integrand computed
-in log-space for numerical stability.
+Substituting the two conjugate posteriors
+$\theta_A \mid y \sim \text{Beta}(a_A, b_A)$ and
+$\theta_B \mid y \sim \text{Beta}(a_B, b_B)$ with
+$a_A = \alpha_0 + k_A$, $b_A = \beta_0 + n_A - k_A$ (and analogously for $B$):
+
+$$
+f_{\Delta \mid y}(z) = \frac{1}{B(a_A, b_A)\, B(a_B, b_B)}
+  \int_{\max(0,\,z)}^{\min(1,\,1+z)}
+    x^{a_A - 1}\,(1 - x)^{b_A - 1}\,
+    (x - z)^{a_B - 1}\,(1 - x + z)^{b_B - 1}
+  \;\mathrm{d}x
+$$
+
+where $B(\cdot, \cdot)$ is the Beta function. The integral has no closed form
+in general; it is evaluated numerically on a fine grid with the integrand
+computed in log-space for numerical stability (see `beta_diff_pdf` in
+`bayesprop.resources.bayes_nonpaired`).
 
 ## Savage-Dickey Bayes Factor
 
