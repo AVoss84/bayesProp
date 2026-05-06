@@ -73,38 +73,167 @@ graph TD
 <small>**Legend:** grey = hyperparameters, blue = latent parameters,
 yellow = observed data.</small>
 
-## Difference posterior (exact convolution)
+## Posterior probability of superiority
 
-The distribution of $\Delta = \theta_A - \theta_B$ is computed via
-**exact log-space convolution** of two Beta densities, not KDE. This avoids
-bandwidth selection issues and gives deterministic, reproducible results.
-
-Because the two posteriors are independent, the density of $\Delta$ is the
-convolution of $f_{\theta_A \mid y}$ with the reflected density of
-$\theta_B \mid y$. Setting $\theta_A = \theta_B + z$, for $z \in (-1, 1)$:
+A key quantity of interest is the probability that group A has a higher
+success rate than group B:
 
 $$
-f_{\Delta \mid y}(z) = \int_{\max(0,\,z)}^{\min(1,\,1+z)}
-  f_{\theta_A \mid y}(x) \;\cdot\; f_{\theta_B \mid y}(x - z) \;\mathrm{d}x
+P(\theta_A > \theta_B \mid y)
+= \int_0^1 f_{\theta_A \mid y}(x)\;
+  F_{\theta_B \mid y}(x)\;\mathrm{d}x
 $$
 
-Substituting the two conjugate posteriors
+where $f_{\theta_A \mid y}$ is the posterior **density** of $\theta_A$
+and $F_{\theta_B \mid y}$ is the posterior **CDF** of $\theta_B$.
+
+### Derivation
+
+Because $\theta_A$ and $\theta_B$ are independent a posteriori:
+
+$$
+P(\theta_A > \theta_B \mid y)
+= \int_0^1 \int_0^x
+    f_{\theta_A \mid y}(x)\;f_{\theta_B \mid y}(t)
+  \;\mathrm{d}t\;\mathrm{d}x
+= \int_0^1 f_{\theta_A \mid y}(x)
+  \underbrace{\int_0^x f_{\theta_B \mid y}(t)\;\mathrm{d}t}_{
+    F_{\theta_B \mid y}(x)}\;\mathrm{d}x
+$$
+
+Substituting the conjugate posteriors
 $\theta_A \mid y \sim \text{Beta}(a_A, b_A)$ and
-$\theta_B \mid y \sim \text{Beta}(a_B, b_B)$ with
-$a_A = \alpha_0 + k_A$, $b_A = \beta_0 + n_A - k_A$ (and analogously for $B$):
+$\theta_B \mid y \sim \text{Beta}(a_B, b_B)$:
 
 $$
-f_{\Delta \mid y}(z) = \frac{1}{B(a_A, b_A)\, B(a_B, b_B)}
-  \int_{\max(0,\,z)}^{\min(1,\,1+z)}
-    x^{a_A - 1}\,(1 - x)^{b_A - 1}\,
-    (x - z)^{a_B - 1}\,(1 - x + z)^{b_B - 1}
+P(\theta_A > \theta_B \mid y)
+= \int_0^1
+    \frac{x^{a_A - 1}(1-x)^{b_A - 1}}{B(a_A, b_A)}
+    \;I_x(a_B, b_B)
   \;\mathrm{d}x
 $$
 
-where $B(\cdot, \cdot)$ is the Beta function. The integral has no closed form
-in general; it is evaluated numerically on a fine grid with the integrand
-computed in log-space for numerical stability (see `beta_diff_pdf` in
-`bayesprop.resources.bayes_nonpaired`).
+where $I_x(a, b) = B(a,b)^{-1}\int_0^x t^{a-1}(1-t)^{b-1}\,\mathrm{d}t$
+is the **regularised incomplete Beta function**.
+
+### Numerical evaluation
+
+The integral is computed via **Gauss-Legendre quadrature** with $n_q$
+nodes on $[0, 1]$. The Beta density is evaluated in log-space for
+numerical stability:
+
+$$
+P(\theta_A > \theta_B \mid y)
+\approx \sum_{j=1}^{n_q} w_j \;\exp\!\bigl[
+  (a_A\!-\!1)\log x_j + (b_A\!-\!1)\log(1\!-\!x_j) - \log B(a_A, b_A)
+\bigr]\;I_{x_j}(a_B, b_B)
+$$
+
+where $(x_j, w_j)$ are the transformed quadrature nodes and weights on
+$[0, 1]$. This gives a **deterministic, exact** result (up to
+floating-point precision) — no Monte Carlo noise. The implementation
+is in `prob_greater` in `bayesprop.resources.bayes_nonpaired`.
+
+## Difference posterior (exact convolution)
+
+### Distribution of a difference of independent random variables
+
+Let $X$ and $Y$ be independent continuous random variables with densities
+$f_X$ and $f_Y$. The density of $Z = X - Y$ is the **convolution** of
+$f_X$ with the reflection of $f_Y$:
+
+$$
+f_Z(z) = \int_{-\infty}^{\infty} f_X(x)\;f_Y(x - z)\;\mathrm{d}x
+$$
+
+This follows directly from the CDF:
+
+$$
+P(Z \leq z)
+= P(X - Y \leq z)
+= \int\!\!\int_{\{(x,y):\,x - y \leq z\}}
+  f_X(x)\,f_Y(y)\;\mathrm{d}y\;\mathrm{d}x
+$$
+
+Substituting $y = x - z'$ and differentiating with respect to $z$ yields
+the convolution integral above.
+
+### Application to the Beta posteriors
+
+In our model the two posteriors are independent:
+
+$$
+\theta_A \mid y_A \sim \text{Beta}(a_A,\, b_A), \qquad
+\theta_B \mid y_B \sim \text{Beta}(a_B,\, b_B)
+$$
+
+with $a_A = \alpha_0 + k_A$, $b_A = \beta_0 + n_A - k_A$ (and
+analogously for group B). Because both $\theta_A$ and $\theta_B$ have
+support $[0, 1]$, the difference $\Delta = \theta_A - \theta_B$ has
+support $(-1, 1)$, and the integration limits tighten to:
+
+$$
+f_{\Delta \mid y}(z)
+= \int_{\max(0,\,z)}^{\min(1,\,1+z)}
+    f_{\theta_A \mid y}(x) \;\cdot\; f_{\theta_B \mid y}(x - z)
+  \;\mathrm{d}x
+$$
+
+The lower limit $\max(0, z)$ ensures $x \in [0,1]$; the upper limit
+$\min(1, 1+z)$ ensures $x - z \in [0,1]$.
+
+Substituting the Beta densities:
+
+$$
+f_{\Delta \mid y}(z)
+= \frac{1}{B(a_A, b_A)\, B(a_B, b_B)}
+  \int_{\max(0,\,z)}^{\min(1,\,1+z)}
+    x^{a_A - 1}(1 - x)^{b_A - 1}
+    (x - z)^{a_B - 1}(1 - x + z)^{b_B - 1}
+  \;\mathrm{d}x
+$$
+
+where $B(a, b) = \Gamma(a)\Gamma(b)/\Gamma(a+b)$ is the Beta function.
+
+### Closed form and numerical evaluation
+
+Pham-Gia & Turkkan (1993) showed that the convolution integral admits a
+**closed-form** expression in terms of **Appell's first hypergeometric
+function** $F_1(a;\,b_1,b_2;\,c;\,x,y)$, split by the sign of $z$.
+However, the $F_1$ arguments leave the double-series convergence region
+near $z = 0$, requiring analytic continuation. In practice it is simpler
+(and equally exact) to evaluate the convolution integral **directly** via
+trapezoidal quadrature with the integrand computed in **log-space** for
+numerical stability:
+
+$$
+\log f_{\Delta}(z)
+= \log\!\int \exp\!\bigl[
+    (a_A\!-\!1)\log x + (b_A\!-\!1)\log(1\!-\!x)
+  + (a_B\!-\!1)\log(x\!-\!z) + (b_B\!-\!1)\log(1\!-\!x\!+\!z)
+\bigr]\,\mathrm{d}x
+\;-\; \log B(a_A, b_A) - \log B(a_B, b_B)
+$$
+
+This avoids underflow that would occur with direct multiplication of
+many small values when the Beta parameters are large. The
+implementation is in `beta_diff_pdf` in
+`bayesprop.resources.bayes_nonpaired`.
+
+!!! note "Reference"
+    Pham-Gia, T. & Turkkan, N. (1993). Bayesian analysis of the
+    difference of two proportions. *Communications in Statistics —
+    Theory and Methods*, **22**(6), 1755–1771.
+
+### Properties
+
+- **Deterministic** — no random sampling, so repeated calls yield
+  identical results.
+- **Exact** — no KDE bandwidth selection or MC noise; the only
+  approximation is floating-point quadrature error (negligible in
+  practice).
+- **Fast** — evaluating $f_\Delta(z)$ on a grid of 500 points takes
+  a few milliseconds on modern hardware.
 
 ## Savage-Dickey Bayes Factor
 

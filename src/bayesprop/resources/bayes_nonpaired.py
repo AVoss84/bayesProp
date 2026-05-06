@@ -152,13 +152,24 @@ class NonPairedBayesPropTest:
         self._w = 0.5 * weights
 
     def _binarize(self, y: np.ndarray) -> np.ndarray:
-        """Return y unchanged if already binary, else binarize at self.threshold."""
+        """Return y unchanged if already binary, else binarize at self.threshold.
+
+        Args:
+            y: Array of scores. If all values are 0.0 or 1.0 the array
+                is returned as-is; otherwise values ≥ ``self.threshold``
+                become 1.0 and values below become 0.0.
+
+        Returns:
+            Binary array of the same length as *y*.
+        """
         unique = np.unique(y)
         if np.all(np.isin(unique, [0.0, 1.0])):
             return y
 
         if self.verbose:
-            print(f"Warning: non-binary scores detected, binarizing at threshold {self.threshold}")
+            print(
+                f"Warning: non-binary scores detected, binarizing at threshold {self.threshold}"
+            )
         return (y >= self.threshold).astype(float)
 
     def prob_greater(self, a1: float, b1: float, a2: float, b2: float) -> float:
@@ -313,10 +324,14 @@ class NonPairedBayesPropTest:
         self._check_fitted()
 
         # Posterior density at null via analytic convolution
-        posterior_at_null = beta_diff_pdf(null_value, self.a_A, self.b_A, self.a_B, self.b_B)
+        posterior_at_null = beta_diff_pdf(
+            null_value, self.a_A, self.b_A, self.a_B, self.b_B
+        )
 
         # Prior density at null via analytic convolution
-        prior_at_null = beta_diff_pdf(null_value, self.alpha0, self.beta0, self.alpha0, self.beta0)
+        prior_at_null = beta_diff_pdf(
+            null_value, self.alpha0, self.beta0, self.alpha0, self.beta0
+        )
 
         BF_01 = posterior_at_null / prior_at_null
         BF_10 = 1.0 / BF_01
@@ -356,7 +371,9 @@ class NonPairedBayesPropTest:
         )
 
     @staticmethod
-    def posterior_probability_H0(BF_01: float, prior_H0: float = 0.5) -> PosteriorProbH0Result:
+    def posterior_probability_H0(
+        BF_01: float, prior_H0: float = 0.5
+    ) -> PosteriorProbH0Result:
         """Convert BF_01 to posterior probability of H0 (spike-and-slab).
 
         Args:
@@ -442,7 +459,9 @@ class NonPairedBayesPropTest:
         if rule in ("rope", "all"):
             rp = self.rope_test()
 
-        return HypothesisDecision(bayes_factor=bf, posterior_null=pn, rope=rp, rule=rule)
+        return HypothesisDecision(
+            bayes_factor=bf, posterior_null=pn, rope=rp, rule=rule
+        )
 
     # ------------------------------------------------------------------ #
     #  Diagnostics
@@ -451,8 +470,22 @@ class NonPairedBayesPropTest:
     def ppc_pvalues(self, seed: int | None = None) -> dict[str, PPCStatistic]:
         """Posterior predictive p-values for summary statistics.
 
+        For each summary statistic (group means, mean difference),
+        replicated datasets are drawn from the posterior predictive
+        distribution and a two-sided p-value is computed as the
+        fraction of replicates at least as extreme as the observed
+        value.
+
+        Args:
+            seed: Random seed for reproducibility.  Falls back to
+                ``self.seed`` if not provided.
+
         Returns:
-            Dict mapping statistic name to :class:`PPCStatistic`.
+            Dict mapping statistic name to :class:`PPCStatistic`
+            with observed value, p-value, and status ("OK" / "WARN").
+
+        Raises:
+            RuntimeError: If :meth:`fit` has not been called.
         """
         self._check_fitted()
 
@@ -462,8 +495,12 @@ class NonPairedBayesPropTest:
         n_B = len(self.y_B_obs)
 
         # Replicate datasets from posterior draws
-        y_A_rep = rng.binomial(1, self.theta_A_samples[:, None], size=(self.n_samples, n_A))
-        y_B_rep = rng.binomial(1, self.theta_B_samples[:, None], size=(self.n_samples, n_B))
+        y_A_rep = rng.binomial(
+            1, self.theta_A_samples[:, None], size=(self.n_samples, n_A)
+        )
+        y_B_rep = rng.binomial(
+            1, self.theta_B_samples[:, None], size=(self.n_samples, n_B)
+        )
 
         checks = {
             "mean(y_A)": (self.y_A_obs.mean(), y_A_rep.mean(axis=1)),
@@ -591,7 +628,20 @@ class NonPairedBayesPropTest:
         plt.show()
 
     def plot_posterior_delta(self, color: str = "#9C27B0", **kwargs: dict) -> None:
-        """KDE posterior density of Δ = θ_A − θ_B with 95% CI."""
+        """KDE posterior density of Δ = θ_A − θ_B with 95% CI.
+
+        Plots a smooth kernel density estimate of the Monte Carlo
+        difference posterior with the 95% credible interval shaded
+        and the posterior mean marked.
+
+        Args:
+            color: Colour for the density curve and fill.
+            **kwargs: Accepts ``figsize`` (default ``(7, 5)``) and
+                ``title`` (default ``"Posterior of Δ (Beta-Bernoulli)"``).
+
+        Raises:
+            RuntimeError: If :meth:`fit` has not been called.
+        """
         import matplotlib.pyplot as plt
 
         self._check_fitted()
@@ -644,7 +694,21 @@ class NonPairedBayesPropTest:
         plt.show()
 
     def plot_savage_dickey(self, color: str = "#9C27B0", **kwargs: dict) -> None:
-        """Posterior vs prior density of Δ with Savage-Dickey BF annotation."""
+        """Posterior vs prior density of Δ with Savage-Dickey BF annotation.
+
+        Overlays the exact convolution densities of Δ under the
+        posterior and prior, marks the density values at Δ = 0, and
+        annotates the plot with BF₁₀, log₁₀ BF₁₀, and the decision.
+
+        Args:
+            color: Colour for the posterior density curve and fill.
+            **kwargs: Accepts ``figsize`` (default ``(7, 5)``) and
+                ``title`` (default
+                ``"Savage-Dickey Test (Beta-Bernoulli)"``).
+
+        Raises:
+            RuntimeError: If :meth:`fit` has not been called.
+        """
         import matplotlib.pyplot as plt
 
         self._check_fitted()
@@ -654,8 +718,15 @@ class NonPairedBayesPropTest:
         x_grid = np.linspace(samples.min() - 0.1, samples.max() + 0.1, 500)
 
         # Posterior and prior density via analytic convolution
-        density_post = np.array([beta_diff_pdf(z, self.a_A, self.b_A, self.a_B, self.b_B) for z in x_grid])
-        density_prior = np.array([beta_diff_pdf(z, self.alpha0, self.beta0, self.alpha0, self.beta0) for z in x_grid])
+        density_post = np.array(
+            [beta_diff_pdf(z, self.a_A, self.b_A, self.a_B, self.b_B) for z in x_grid]
+        )
+        density_prior = np.array(
+            [
+                beta_diff_pdf(z, self.alpha0, self.beta0, self.alpha0, self.beta0)
+                for z in x_grid
+            ]
+        )
 
         figsize = kwargs.pop("figsize", (7, 5))
         fig, ax = plt.subplots(figsize=figsize)
@@ -724,12 +795,29 @@ class NonPairedBayesPropTest:
     # ------------------------------------------------------------------ #
 
     def print_summary(self) -> None:
-        """Print posterior summary, Savage-Dickey test, and PPC p-values."""
+        """Print posterior summary, Savage-Dickey test, and PPC p-values.
+
+        Outputs a formatted report to stdout containing:
+
+        - Beta posterior parameters and moments for θ_A, θ_B
+        - Posterior mean Δ, 95% CI, and P(A > B)
+        - Savage-Dickey Bayes factor with interpretation
+        - Posterior model probabilities P(H₀ | D) and P(H₁ | D)
+        - Posterior predictive p-values for key summary statistics
+        - Trace summary table (mean, sd, HDI)
+
+        Raises:
+            RuntimeError: If :meth:`fit` has not been called.
+        """
         self._check_fitted()
 
         s = self.summary
         n_A, n_B = len(self.y_A_obs), len(self.y_B_obs)
-        verdict = "A wins" if s.p_A_greater_B > 0.95 else ("Tied" if s.p_A_greater_B > 0.5 else "B wins")
+        verdict = (
+            "A wins"
+            if s.p_A_greater_B > 0.95
+            else ("Tied" if s.p_A_greater_B > 0.5 else "B wins")
+        )
 
         print("Beta-Bernoulli posterior summary (Non-Paired)")
         print("=" * 60)
@@ -775,7 +863,9 @@ class NonPairedBayesPropTest:
         print(f"  {'Statistic':<25} {'Observed':>10} {'p-value':>10} {'Status':>8}")
         print("  " + "-" * 55)
         for stat, vals in ppc.items():
-            print(f"  {stat:<25} {vals.observed:>10.4f} {vals.p_value:>10.3f} {vals.status:>8}")
+            print(
+                f"  {stat:<25} {vals.observed:>10.4f} {vals.p_value:>10.3f} {vals.status:>8}"
+            )
 
         print()
         print("Trace summary")
@@ -793,7 +883,19 @@ class NonPairedBayesPropTest:
         label_B: str = "Model B",
         **kwargs: Any,
     ) -> None:
-        """Forest plot + P(A>B) bar chart for multiple metrics."""
+        """Forest plot with P(A > B) bar chart for multiple metrics.
+
+        The left panel shows posterior mean differences with 95%
+        credible intervals; the right panel shows horizontal bars
+        for the posterior probability of superiority.
+
+        Args:
+            results: Mapping from metric name to a fitted
+                :class:`NonPairedBayesPropTest` instance.
+            label_A: Display label for group A.
+            label_B: Display label for group B.
+            **kwargs: Accepts ``figsize`` and ``title``.
+        """
         import matplotlib.patches as mpatches
         import matplotlib.pyplot as plt
 
@@ -803,14 +905,19 @@ class NonPairedBayesPropTest:
         ci_highs = [results[m].summary.ci_95.upper for m in metrics]
         probs = [results[m].summary.p_A_greater_B for m in metrics]
 
-        colors = ["#2196F3" if p > 0.95 else "#FF9800" if p > 0.5 else "#F44336" for p in probs]
+        colors = [
+            "#2196F3" if p > 0.95 else "#FF9800" if p > 0.5 else "#F44336"
+            for p in probs
+        ]
         y_pos = np.arange(len(metrics))
 
         figsize = kwargs.pop("figsize", (14, max(4, 2 * len(metrics))))
         fig, axes = plt.subplots(1, 2, figsize=figsize)
 
         ax = axes[0]
-        for i, (m, ci_l, ci_h, col) in enumerate(zip(means, ci_lows, ci_highs, colors, strict=False)):
+        for i, (m, ci_l, ci_h, col) in enumerate(
+            zip(means, ci_lows, ci_highs, colors, strict=False)
+        ):
             ax.plot(
                 [ci_l, ci_h],
                 [i, i],
@@ -875,13 +982,34 @@ class NonPairedBayesPropTest:
     def print_comparison_table(
         results: dict[str, "NonPairedBayesPropTest"],
     ) -> None:
-        """Print a formatted comparison table across metrics."""
+        """Print a formatted comparison table across metrics.
+
+        Displays the posterior mean difference, 95% credible interval,
+        posterior probability of superiority P(A > B), and a verdict
+        for each metric in a fixed-width table.
+
+        The verdict is determined as:
+
+        - **A wins** if P(A > B) > 0.95
+        - **B wins** if P(A > B) ≤ 0.5
+        - **Tied** otherwise
+
+        Args:
+            results: Mapping from metric name to a fitted
+                :class:`NonPairedBayesPropTest` instance.
+        """
         print("=" * 80)
-        print(f"{'Metric':<25} {'Mean Δ':>8} {'95% CI':>20} {'P(A>B)':>8} {'Verdict':>12}")
+        print(
+            f"{'Metric':<25} {'Mean Δ':>8} {'95% CI':>20} {'P(A>B)':>8} {'Verdict':>12}"
+        )
         print("=" * 80)
         for m, model in results.items():
             s = model.summary
-            verdict = "A wins" if s.p_A_greater_B > 0.95 else ("Tied" if s.p_A_greater_B > 0.5 else "B wins")
+            verdict = (
+                "A wins"
+                if s.p_A_greater_B > 0.95
+                else ("Tied" if s.p_A_greater_B > 0.5 else "B wins")
+            )
             print(
                 f"{m:<25} {s.mean_delta:>8.4f} "
                 f"[{s.ci_95.lower:>7.4f}, {s.ci_95.upper:>7.4f}] "
