@@ -7,20 +7,40 @@ Beta-Bernoulli model. Each group has its own success probability
 $\theta_A$ and $\theta_B$, estimated independently from binarized
 pass/fail data.
 
-Use this model when model A and model B are evaluated on **different** items
-(i.e. the observations are not paired).
+Use this model when group A and group B consist of **independent** observations
+(i.e. different items or subjects in each group).
+
+Input arrays can be **binary** (0/1) or **real-valued on (0, 1)** — continuous
+scores are automatically binarized at a configurable threshold.
 
 ## Generative model
 
 $$
 \theta_A \sim \text{Beta}(\alpha_0, \beta_0) \qquad
 \theta_B \sim \text{Beta}(\alpha_0, \beta_0)
+\qquad (\text{independent draws})
 $$
 
 $$
 y_{A,i} \sim \text{Bernoulli}(\theta_A), \quad i = 1, \dots, n_A \qquad
 y_{B,j} \sim \text{Bernoulli}(\theta_B), \quad j = 1, \dots, n_B
 $$
+
+Here $\alpha_0$ and $\beta_0$ are **fixed** hyperparameters (user-specified
+constants, not random variables). Although both groups share the same prior
+family, $\theta_A$ and $\theta_B$ are drawn **independently**, so the two
+groups are fully independent:
+
+$$
+p(y_A, y_B \mid \alpha_0, \beta_0)
+= p(y_A \mid \alpha_0, \beta_0)\;p(y_B \mid \alpha_0, \beta_0)
+$$
+
+Dependence would only arise in a hierarchical model where $\alpha_0, \beta_0$
+are themselves random with a shared hyperprior. In this model they are fixed
+constants, so the DAG edges from $\alpha_0, \beta_0$ to both $\theta_A$ and
+$\theta_B$ encode the same prior specification — not a probabilistic
+dependence path.
 
 The posterior is available in closed form via conjugacy:
 

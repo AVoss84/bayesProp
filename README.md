@@ -7,9 +7,10 @@
 [![Tests](https://github.com/AVoss84/bayesProp/actions/workflows/tests.yml/badge.svg)](https://github.com/AVoss84/bayesProp/actions/workflows/tests.yml)
 [![codecov](https://raw.githubusercontent.com/AVoss84/bayesProp/badges/coverage-badge.svg)](https://github.com/AVoss84/bayesProp/actions/workflows/tests.yml)
 
-A Python package for **Bayesian hypothesis testing** of binary (pass/fail) outcomes in A/B experiments
-using analytic and approximate inference methods —
-particularly relevant when comparing features in **software engineering** or evaluating model changes in **AI/MLOps** pipelines.
+A Python package for **Bayesian hypothesis testing** of success-rate differences in any Bernoulli-like experiment,
+using analytic and approximate inference methods.
+Input data can be **binary** (0/1) or **real-valued on (0, 1)** — continuous scores are automatically binarized at a configurable threshold.
+Typical applications include comparing treatments, groups, items, model variants, or any two conditions whose outcomes can be expressed as proportions.
 Please check out our [Getting Started](https://avoss84.github.io/bayesProp/getting_started/) guide for installation and quick examples.
 
 ## Features

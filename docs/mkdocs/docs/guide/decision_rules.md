@@ -2,7 +2,7 @@
 
 ## Overview
 
-After fitting a model, you need to **decide** whether model A differs from model B.
+After fitting a model, you need to **decide** whether group A differs from group B.
 `bayesprop` provides three complementary decision frameworks, all accessible via a
 single `model.decide()` call.
 
@@ -92,11 +92,60 @@ print(f"Decision: {bf.decision}")
 
 ## Framework 2: Posterior Probability of \(H_0\)
 
-Under a spike-and-slab prior, the posterior probability of the null hypothesis is:
+### Spike-and-slab prior
+
+The standard continuous prior on \(\Delta\) assigns zero probability to
+the point \(\Delta = 0\) because a single point has Lebesgue measure
+zero. To give \(H_0\!: \Delta = 0\) a non-zero prior probability we
+use a **spike-and-slab** prior — a mixture of a point mass (Dirac
+delta) and a continuous density:
 
 \[
-P(H_0 \mid D) = \frac{BF_{01} \cdot \pi_0}{BF_{01} \cdot \pi_0 + (1 - \pi_0)}
+p(\Delta) = \pi_0\;\delta_0(\Delta) \;+\; (1 - \pi_0)\;g(\Delta)
 \]
+
+where:
+
+- \(\delta_0\) is the **Dirac measure** (the "spike") concentrated at
+  \(\Delta = 0\),
+- \(g(\Delta)\) is the continuous **slab** density (e.g. the prior
+  on \(\Delta\) under \(H_1\)),
+- \(\pi_0 = P(H_0)\) is the prior probability of the null.
+
+In measure-theoretic terms the prior is a mixture of a discrete and a
+continuous component: \(\pi_0\,\delta_{\{0\}}\) lives on the singleton
+\(\{0\}\) while \((1-\pi_0)\,g\) is absolutely continuous with respect
+to Lebesgue measure on \(\mathbb{R}\). The total prior is therefore
+**neither** purely discrete nor purely continuous — it is a mixed
+measure on \((\mathbb{R},\,\mathcal{B}(\mathbb{R}))\).
+
+### Posterior model probability
+
+Under this prior, Bayes' theorem yields the posterior probability of the
+null model:
+
+\[
+P(H_0 \mid D)
+= \frac{p(D \mid H_0)\;\pi_0}
+       {p(D \mid H_0)\;\pi_0 + p(D \mid H_1)\;(1 - \pi_0)}
+= \frac{BF_{01}\;\pi_0}
+       {BF_{01}\;\pi_0 + (1 - \pi_0)}
+\]
+
+where \(BF_{01} = p(D \mid H_0)/p(D \mid H_1)\) is the Bayes factor
+in favour of the null. Equivalently in odds form:
+
+\[
+\underbrace{\frac{P(H_0 \mid D)}{P(H_1 \mid D)}}_{\text{posterior odds}}
+= BF_{01} \;\cdot\;
+  \underbrace{\frac{\pi_0}{1 - \pi_0}}_{\text{prior odds}}
+\]
+
+This makes clear that the Bayes factor converts prior odds into
+posterior odds, and the choice of \(\pi_0\) acts as a calibration knob.
+The default \(\pi_0 = 0.5\) gives equal prior odds, so
+\(P(H_0 \mid D)\) is determined entirely by the data through
+\(BF_{01}\).
 
 ### Decision thresholds
 
@@ -113,9 +162,32 @@ print(f"P(H₀|D) = {pn.p_H0:.4f}  →  {pn.decision}")
 
 ## Framework 3: ROPE Analysis
 
-The **Region of Practical Equivalence** (Kruschke, 2018) defines a range of
-effect sizes \([-\varepsilon, +\varepsilon]\) considered "practically zero".
-The decision is based on where the 95% credible interval falls relative to the ROPE:
+### Motivation
+
+Both the Bayes factor and the posterior null test a **point null**
+\(H_0\!: \Delta = 0\). In practice, a tiny but non-zero effect (say
+\(\Delta = 0.001\)) is often irrelevant for decision-making. The
+**Region of Practical Equivalence** (ROPE; Kruschke, 2018) addresses
+this by replacing the point null with an **interval null**: any effect
+inside \([-\varepsilon, +\varepsilon]\) is treated as practically
+equivalent to zero.
+
+This shifts the question from *"Is the effect exactly zero?"* to the
+more useful *"Is the effect small enough to ignore?"*.
+
+### Definition
+
+Let \(\text{CI}_{95}\) denote the 95% highest-density credible interval
+of the posterior of \(\Delta = \theta_A - \theta_B\) (or
+\(\Delta = p_A - p_B\) for the paired models). The ROPE is the
+symmetric interval:
+
+\[
+\text{ROPE} = [-\varepsilon,\; +\varepsilon]
+\]
+
+The decision rule compares the position of \(\text{CI}_{95}\) relative
+to the ROPE:
 
 | CI position | Decision |
 |-------------|----------|
@@ -123,6 +195,35 @@ The decision is based on where the 95% credible interval falls relative to the R
 | 95% CI entirely **below** ROPE | Reject \(H_0\) — B practically better |
 | 95% CI entirely **inside** ROPE | Accept \(H_0\) — practically equivalent |
 | 95% CI **overlaps** ROPE boundary | Undecided — more data needed |
+
+Additionally, the fraction of the posterior mass inside the ROPE is
+reported:
+
+\[
+\rho = P(\Delta \in \text{ROPE} \mid D)
+= \int_{-\varepsilon}^{+\varepsilon} p(\Delta \mid D)\;\mathrm{d}\Delta
+\]
+
+A high \(\rho\) (close to 1) indicates that most of the posterior
+supports practical equivalence; a low \(\rho\) (close to 0) indicates
+that the effect is clearly outside the ROPE.
+
+### Relationship to the Bayes factor
+
+The ROPE and the Bayes factor answer **different** questions. The Bayes
+factor evaluates evidence for a point null (\(\Delta = 0\)); the ROPE
+evaluates whether the entire posterior is consistent with a
+**range** of negligible effects. In particular:
+
+- A large \(BF_{10}\) (strong evidence against \(H_0\)) **and** 95% CI
+  inside the ROPE can co-occur when the posterior is tightly
+  concentrated at a small but non-zero \(\Delta\) — statistically
+  detectable, but practically irrelevant.
+- Conversely, a wide posterior may overlap the ROPE boundary
+  (undecided) even when \(BF_{10} \approx 1\) (inconclusive).
+
+Using both frameworks together guards against mistaking statistical
+significance for practical importance.
 
 ```python
 rope = model.rope_test()
@@ -174,3 +275,4 @@ See [Data Schemas](../api/data_schemas.md) for full field documentation.
 
 1. **Kruschke, J. K.** (2018). Rejecting or accepting parameter values in Bayesian estimation. *Advances in Methods and Practices in Psychological Science*, 1(2), 270–280.
 2. **Kass, R. E. & Raftery, A. E.** (1995). Bayes factors. *Journal of the American Statistical Association*, 90(430), 773–795.
+3. **Mitchell, T. J. & Beauchamp, J. J.** (1988). Bayesian variable selection in linear regression. *Journal of the American Statistical Association*, 83(404), 1023–1032.

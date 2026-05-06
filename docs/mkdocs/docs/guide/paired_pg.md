@@ -48,18 +48,109 @@ yellow = observed data.</small>
 
 ## Pólya-Gamma augmentation
 
-The key insight of the PG sampler is that the logistic likelihood can be
-written as a Gaussian scale mixture using Pólya-Gamma auxiliary variables
-$\omega_i \sim \text{PG}(1, 0)$. This makes the full conditional of
-$(\mu, \delta_A)$ Gaussian, enabling efficient block Gibbs updates:
+### Background
 
-1. **Sample** $\omega_i \mid \mu, \delta_A$ from $\text{PG}(1, \psi_i)$
-   where $\psi_i$ is the linear predictor.
-2. **Sample** $(\mu, \delta_A) \mid \omega, y$ from a multivariate Normal
-   (weighted least-squares with diagonal weight matrix $\text{diag}(\omega)$).
+A random variable $\omega \sim \text{PG}(b, c)$ follows a **Pólya-Gamma**
+distribution with parameters $b > 0$ and $c \in \mathbb{R}$. Its key
+property (Polson, Scott & Windle, 2013) is an integral identity that turns
+the logistic likelihood into a Gaussian scale mixture:
 
-Each Gibbs sweep thus requires only PG random variates and a linear system
-solve — no Metropolis-Hastings tuning is needed.
+$$
+\frac{(e^{\psi})^{a}}{(1 + e^{\psi})^{b}}
+= 2^{-b} e^{\kappa\psi}
+  \int_{0}^{\infty} e^{-\omega\psi^{2}/2}\;
+  p(\omega \mid b, 0)\;\mathrm{d}\omega,
+\qquad \kappa = a - \tfrac{b}{2}
+$$
+
+For a single Bernoulli observation $y_i \in \{0,1\}$ with
+$p_i = \sigma(\psi_i) = (1+e^{-\psi_i})^{-1}$, we have $b=1$ and $a = y_i$,
+giving $\kappa_i = y_i - \tfrac{1}{2}$.
+
+### Stacked design
+
+We stack the $n$ paired observations into a $2n$-dimensional regression:
+
+$$
+\mathbf{y} = \begin{pmatrix} y_{A,1} \\ \vdots \\ y_{A,n} \\ y_{B,1} \\ \vdots \\ y_{B,n} \end{pmatrix},
+\qquad
+\mathbf{X} = \begin{pmatrix}
+1 & 1 \\ \vdots & \vdots \\ 1 & 1 \\
+1 & 0 \\ \vdots & \vdots \\ 1 & 0
+\end{pmatrix},
+\qquad
+\boldsymbol{\beta} = \begin{pmatrix} \mu \\ \delta_A \end{pmatrix}
+$$
+
+so the linear predictor is $\boldsymbol{\psi} = \mathbf{X}\boldsymbol{\beta}$,
+i.e. $\psi_i = \mu + \delta_A$ for the group-A rows and $\psi_i = \mu$ for
+the group-B rows, and $\boldsymbol{\kappa} = \mathbf{y} - \tfrac{1}{2}$.
+
+### Prior
+
+The Gaussian prior on $\boldsymbol{\beta}$ is:
+
+$$
+\boldsymbol{\beta} \sim \mathcal{N}\!\left(\mathbf{b}_0,\;
+\mathbf{B}_0\right),
+\qquad
+\mathbf{b}_0 = \mathbf{0},
+\quad
+\mathbf{B}_0 = \begin{pmatrix} \sigma_\mu^{2} & 0 \\ 0 & \sigma_\delta^{2} \end{pmatrix}
+$$
+
+with prior precision $\mathbf{B}_0^{-1} = \operatorname{diag}\!\bigl(1/\sigma_\mu^{2},\;1/\sigma_\delta^{2}\bigr)$.
+
+### Gibbs sampler
+
+After augmenting with $\omega_i \sim \text{PG}(1, \psi_i)$, the joint
+posterior of $(\boldsymbol{\beta}, \boldsymbol{\omega})$ admits two
+tractable full conditionals that are alternated at each sweep:
+
+**Step 1 — Sample auxiliary variables:**
+
+$$
+\omega_i \mid \boldsymbol{\beta}, y_i
+\;\sim\; \text{PG}\!\bigl(1,\; \mathbf{x}_i^{\top}\boldsymbol{\beta}\bigr),
+\qquad i = 1, \dots, 2n
+$$
+
+**Step 2 — Sample regression coefficients:**
+
+$$
+\boldsymbol{\beta} \mid \boldsymbol{\omega}, \mathbf{y}
+\;\sim\; \mathcal{N}\!\bigl(\boldsymbol{\mu}_{\beta},\;
+\boldsymbol{\Sigma}_{\beta}\bigr)
+$$
+
+where the posterior precision and mean are:
+
+$$
+\boldsymbol{\Sigma}_{\beta}^{-1}
+= \mathbf{X}^{\top}\!\operatorname{diag}(\boldsymbol{\omega})\,\mathbf{X}
+  + \mathbf{B}_0^{-1}
+$$
+
+$$
+\boldsymbol{\mu}_{\beta}
+= \boldsymbol{\Sigma}_{\beta}
+  \bigl(\mathbf{X}^{\top}\boldsymbol{\kappa}
+        + \mathbf{B}_0^{-1}\,\mathbf{b}_0\bigr)
+$$
+
+This is a standard Bayesian weighted least-squares update: the PG
+variables $\omega_i$ act as observation weights.  Because both
+conditionals are available in closed form, the sampler requires
+**no tuning parameters** (unlike Metropolis-Hastings) and mixes well
+for logistic models.
+
+### Why it works
+
+Marginalising over $\boldsymbol{\omega}$ recovers the exact logistic
+likelihood, so the marginal posterior
+$p(\boldsymbol{\beta} \mid \mathbf{y})$ from the Gibbs sampler
+targets the true posterior — there is no approximation error beyond
+finite MCMC variance.
 
 ## MCMC convergence diagnostics
 
@@ -404,3 +495,8 @@ See the [BFDA guide](bfda.md) for the full sample-size planning workflow.
 ## API
 
 See [API Reference — Paired Model (Pólya-Gamma)](../api/bayes_paired_pg.md) for full method documentation.
+
+## References
+
+1. **Polson, N. G., Scott, J. G. & Windle, J.** (2013). Bayesian inference for logistic models using Pólya-Gamma latent variables. *Journal of the American Statistical Association*, 108(504), 1339–1349.
+2. **Windle, J., Polson, N. G. & Scott, J. G.** (2014). Sampling Pólya-Gamma random variates: alternate and approximate techniques. *arXiv:1405.0506*.

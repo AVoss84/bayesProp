@@ -2,8 +2,8 @@
 
 ## Overview
 
-The paired model is used when **both** models are evaluated on the **same**
-items. It uses a pooled Bernoulli logistic regression with a Laplace
+The paired model is used when **both** conditions are evaluated on the **same**
+items or subjects. It uses a pooled Bernoulli logistic regression with a Laplace
 approximation (MAP + analytical Hessian) for fast, analytic posterior inference.
 
 ## Generative model
@@ -19,7 +19,7 @@ y_{B,i} \sim \text{Bernoulli}\bigl(\sigma(\mu)\bigr)
 $$
 
 where $\sigma(x) = 1/(1 + e^{-x})$ is the logistic sigmoid function.
-The parameter $\delta_A$ captures model A's advantage on the logit scale;
+The parameter $\delta_A$ captures group A's advantage on the logit scale;
 $\mu$ is the shared baseline log-odds.
 
 ### Directed Acyclic Graph (DAG)
@@ -267,8 +267,8 @@ for metric in metric_names:
 ```python
 PairedBayesPropTest.plot_forest(
     comparison_results,
-    label_A="Gemini 2.5 Flash",
-    label_B="Gemini 2.0 Flash",
+    label_A="Group A",
+    label_B="Group B",
 )
 ```
 

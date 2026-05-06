@@ -2,14 +2,63 @@
 
 ## Overview
 
-BFDA is the Bayesian analog of frequentist power analysis. Given a
-hypothesised true effect $\Delta = \theta_A - \theta_B$, it estimates
-the probability of obtaining **decisive** evidence (e.g. $BF_{10} > 3$)
-at each sample size via simulation.
+BFDA is the Bayesian analog of frequentist power analysis
+(Schönbrodt & Wagenmakers, 2018). In classical power analysis one asks:
+*"How large must the sample be so that a frequentist test rejects
+$H_0$ with probability $\geq 1-\beta$?"* — BFDA asks the analogous
+Bayesian question: *"How large must the sample be so that the Bayes
+factor reaches decisive evidence with high probability?"*
+
+### Motivation
+
+Unlike $p$-values, Bayes factors quantify evidence on a continuous scale
+and can favour either $H_0$ or $H_1$. However, an experiment can still
+yield an **inconclusive** Bayes factor (e.g. $BF_{10} \approx 1$) if
+the sample is too small. BFDA addresses this by estimating, for each
+candidate sample size $n$, the probability of obtaining a Bayes factor
+that exceeds a pre-specified evidence threshold — ensuring that the
+experiment is adequately powered to be informative.
+
+### Definition
+
+Given assumed true success rates $\theta_A$ and $\theta_B$ and a
+decisiveness threshold $\gamma$ (e.g. $\gamma = 3$), BFDA estimates
+**Bayesian power** at sample size $n$ as:
 
 $$
-\text{Bayesian Power}(n) = P\!\left(BF_{10} > \text{threshold} \;\middle|\; \theta_A, \theta_B, n\right)
+\text{Power}(n) = P\!\left(BF_{10} > \gamma \;\middle|\; \theta_A, \theta_B, n\right)
 $$
+
+Because no closed-form expression exists for the distribution of
+$BF_{10}$ under the alternative, the probability is estimated via
+**Monte Carlo simulation**: for each $n$, many datasets are generated
+from the assumed DGP, each is analysed with the chosen Bayesian model,
+and the fraction of replications where $BF_{10} > \gamma$ is the
+estimated power.
+
+### Algorithm
+
+For each candidate sample size $n$ and for $s = 1, \dots, S$ simulation
+replications:
+
+1. **Generate** synthetic data
+   $y_A^{(s)} \sim \text{Bern}(\theta_A)^n$,
+   $y_B^{(s)} \sim \text{Bern}(\theta_B)^n$
+   under the assumed true rates.
+2. **Fit** the chosen Bayesian model (non-paired or paired) to
+   $(y_A^{(s)}, y_B^{(s)})$.
+3. **Compute** the Bayes factor $BF_{10}^{(s)}$ via the Savage-Dickey
+   density ratio.
+4. **Record** whether $BF_{10}^{(s)} > \gamma$.
+
+The estimated power is $\widehat{\text{Power}}(n) = S^{-1}\sum_{s} \mathbf{1}\!\bigl[BF_{10}^{(s)} > \gamma\bigr]$.
+
+### Alternative decision rules
+
+Besides the Bayes factor threshold, BFDA also supports the **posterior
+null** criterion $P(H_0 \mid D) < \alpha$ as the decisiveness condition,
+which can be more intuitive for practitioners who think in terms of
+posterior probabilities rather than evidence ratios.
 
 ## Non-paired design
 

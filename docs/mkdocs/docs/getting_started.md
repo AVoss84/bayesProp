@@ -26,7 +26,8 @@ source .venv/bin/activate
 
 ### Non-paired design (independent groups)
 
-Use this when model A and model B are evaluated on **different** items.
+Use this when group A and group B consist of **independent** observations (i.e. different items or subjects in each group).
+Input arrays can be **binary** (0/1) or **real-valued on (0, 1)** — continuous scores are automatically binarized at a configurable threshold.
 
 ```python
 from bayesprop.resources.bayes_nonpaired import NonPairedBayesPropTest
@@ -52,15 +53,15 @@ model.plot_posteriors()
 model.plot_savage_dickey()
 ```
 
-### Paired design (same items, two models)
+### Paired design (same items, two conditions)
 
-Use this when **both** models are evaluated on the **same** items.
+Use this when **both** conditions (e.g. treatment A and treatment B, or version A and version B) are evaluated on the **same** items or subjects.
 
 ```python
 from bayesprop.resources.bayes_paired_laplace import PairedBayesPropTest
 from bayesprop.utils.utils import simulate_paired_scores
 
-# Simulate paired binary data (y_A[i] and y_B[i] refer to the same item)
+# Simulate paired binary data (y_A[i] and y_B[i] refer to the same item/subject)
 sim = simulate_paired_scores(N=100, delta_A=0.5, seed=42)
 y_A, y_B = sim.y_A, sim.y_B
 
@@ -101,7 +102,7 @@ for metric_name, y_a, y_b in metric_data:
     m = NonPairedBayesPropTest(seed=42).fit(y_a, y_b)
     results[metric_name] = m
 
-NonPairedBayesPropTest.plot_forest(results, label_A="Model v2", label_B="Model v1")
+NonPairedBayesPropTest.plot_forest(results, label_A="Group A", label_B="Group B")
 NonPairedBayesPropTest.print_comparison_table(results)
 ```
 
