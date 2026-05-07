@@ -42,10 +42,18 @@ class SavageDickeyResult(BaseModel):
 
     BF_01: float = Field(..., description="Bayes factor in favour of H0.")
     BF_10: float = Field(..., description="Bayes factor in favour of H1.")
-    posterior_density_at_0: float = Field(..., description="Posterior density evaluated at the null value.")
-    prior_density_at_0: float = Field(..., description="Prior density evaluated at the null value.")
-    interpretation: str = Field(..., description="Human-readable interpretation of the evidence.")
-    decision: str = Field(..., description="Decision string, e.g. 'Reject H0' or 'Fail to reject H0'.")
+    posterior_density_at_0: float = Field(
+        ..., description="Posterior density evaluated at the null value."
+    )
+    prior_density_at_0: float = Field(
+        ..., description="Prior density evaluated at the null value."
+    )
+    interpretation: str = Field(
+        ..., description="Human-readable interpretation of the evidence."
+    )
+    decision: str = Field(
+        ..., description="Decision string, e.g. 'Reject H0' or 'Fail to reject H0'."
+    )
 
 
 class PosteriorProbH0Result(BaseModel):
@@ -68,7 +76,9 @@ class PPCStatistic(BaseModel):
 
     observed: float = Field(..., description="Observed value of the test statistic.")
     p_value: float = Field(..., ge=0, le=1, description="Two-sided PPC p-value.")
-    status: Literal["OK", "WARN"] = Field(..., description="OK if p > 0.05, WARN otherwise.")
+    status: Literal["OK", "WARN"] = Field(
+        ..., description="OK if p > 0.05, WARN otherwise."
+    )
 
 
 # ====================================================================== #
@@ -80,8 +90,12 @@ class NonPairedTrueParams(BaseModel):
     """True parameters used to generate non-paired simulation data."""
 
     N: int = Field(..., gt=0, description="Number of observations per group.")
-    theta_A: float = Field(..., ge=0, le=1, description="True success rate for model A.")
-    theta_B: float = Field(..., ge=0, le=1, description="True success rate for model B.")
+    theta_A: float = Field(
+        ..., ge=0, le=1, description="True success rate for model A."
+    )
+    theta_B: float = Field(
+        ..., ge=0, le=1, description="True success rate for model B."
+    )
 
 
 class NonPairedSimResult(BaseModel):
@@ -89,11 +103,21 @@ class NonPairedSimResult(BaseModel):
 
     model_config = {"arbitrary_types_allowed": True}
 
-    y_A: npt.NDArray[np.float64] = Field(..., description="Binary outcomes for model A.")
-    y_B: npt.NDArray[np.float64] = Field(..., description="Binary outcomes for model B.")
-    theta_A: float = Field(..., ge=0, le=1, description="True success rate for model A.")
-    theta_B: float = Field(..., ge=0, le=1, description="True success rate for model B.")
-    true_params: NonPairedTrueParams = Field(..., description="True simulation parameters.")
+    y_A: npt.NDArray[np.float64] = Field(
+        ..., description="Binary outcomes for model A."
+    )
+    y_B: npt.NDArray[np.float64] = Field(
+        ..., description="Binary outcomes for model B."
+    )
+    theta_A: float = Field(
+        ..., ge=0, le=1, description="True success rate for model A."
+    )
+    theta_B: float = Field(
+        ..., ge=0, le=1, description="True success rate for model B."
+    )
+    true_params: NonPairedTrueParams = Field(
+        ..., description="True simulation parameters."
+    )
 
 
 class PairedTrueParams(BaseModel):
@@ -107,7 +131,9 @@ class PairedTrueParams(BaseModel):
         description="SD of the latent item ability (0 = fixed effects).",
     )
     delta_A: float = Field(..., description="Logit-scale treatment effect for model A.")
-    delta_B: float = Field(default=0.0, description="Logit-scale offset for model B (0 by default).")
+    delta_B: float = Field(
+        default=0.0, description="Logit-scale offset for model B (0 by default)."
+    )
 
 
 class PairedSimResult(BaseModel):
@@ -115,12 +141,24 @@ class PairedSimResult(BaseModel):
 
     model_config = {"arbitrary_types_allowed": True}
 
-    y_A: npt.NDArray[np.float64] = Field(..., description="Binary outcomes for model A.")
-    y_B: npt.NDArray[np.float64] = Field(..., description="Binary outcomes for model B.")
-    p_A_true: npt.NDArray[np.float64] = Field(..., description="Item-level probabilities for model A.")
-    p_B_true: npt.NDArray[np.float64] = Field(..., description="Item-level probabilities for model B.")
-    theta_true: npt.NDArray[np.float64] = Field(..., description="Latent item abilities.")
-    true_params: PairedTrueParams = Field(..., description="True simulation parameters.")
+    y_A: npt.NDArray[np.float64] = Field(
+        ..., description="Binary outcomes for model A."
+    )
+    y_B: npt.NDArray[np.float64] = Field(
+        ..., description="Binary outcomes for model B."
+    )
+    p_A_true: npt.NDArray[np.float64] = Field(
+        ..., description="Item-level probabilities for model A."
+    )
+    p_B_true: npt.NDArray[np.float64] = Field(
+        ..., description="Item-level probabilities for model B."
+    )
+    theta_true: npt.NDArray[np.float64] = Field(
+        ..., description="Latent item abilities."
+    )
+    true_params: PairedTrueParams = Field(
+        ..., description="True simulation parameters."
+    )
 
 
 # ====================================================================== #
@@ -133,27 +171,46 @@ class NonPairedConfig(BaseModel):
 
     alpha0: float = Field(default=1.0, gt=0, description="Prior alpha for Beta.")
     beta0: float = Field(default=1.0, gt=0, description="Prior beta for Beta.")
-    threshold: float = Field(default=0.7, ge=0, le=1, description="Binarization threshold.")
-    n_quad: int = Field(default=100, gt=0, description="Number of Gauss-Legendre quadrature nodes.")
+    threshold: float = Field(
+        default=0.7, ge=0, le=1, description="Binarization threshold."
+    )
+    n_quad: int = Field(
+        default=100, gt=0, description="Number of Gauss-Legendre quadrature nodes."
+    )
     seed: int = Field(default=0, description="Random seed.")
-    n_samples: int = Field(default=20_000, gt=0, description="Number of Monte Carlo draws.")
+    n_samples: int = Field(
+        default=20_000, gt=0, description="Number of Monte Carlo draws."
+    )
     verbose: bool = Field(default=False, description="Print diagnostic messages.")
 
 
 class NonPairedTestResult(BaseModel):
     """Output of :meth:`NonPairedBayesPropTest.test`."""
 
-    thetaA_post: BetaParams = Field(..., description="Posterior Beta parameters for group A.")
-    thetaB_post: BetaParams = Field(..., description="Posterior Beta parameters for group B.")
-    P_B_greater_A: float = Field(..., ge=0, le=1, description="P(theta_B > theta_A).")
+    thetaA_post: BetaParams = Field(
+        ..., description="Posterior Beta parameters for group A."
+    )
+    thetaB_post: BetaParams = Field(
+        ..., description="Posterior Beta parameters for group B."
+    )
+    P_B_greater_A: float = Field(
+        ...,
+        ge=0,
+        le=1,
+        description="Posterior probability of superiority P(theta_B > theta_A).",
+    )
 
 
 class NonPairedSummary(BaseModel):
     """Summary produced by :meth:`NonPairedBayesPropTest.fit`."""
 
     mean_delta: float = Field(..., description="Posterior mean of Delta = p_A - p_B.")
-    ci_95: CredibleInterval = Field(..., description="95 % credible interval for Delta.")
-    p_A_greater_B: float = Field(..., alias="P(A > B)", ge=0, le=1, description="P(p_A > p_B).")
+    ci_95: CredibleInterval = Field(
+        ..., description="95 % credible interval for Delta."
+    )
+    p_A_greater_B: float = Field(
+        ..., alias="P(A > B)", ge=0, le=1, description="P(p_A > p_B)."
+    )
     theta_A_mean: float = Field(..., description="Posterior mean of theta_A.")
     theta_B_mean: float = Field(..., description="Posterior mean of theta_B.")
 
@@ -168,10 +225,18 @@ class NonPairedSummary(BaseModel):
 class PairedSummary(BaseModel):
     """Summary produced by :meth:`PairedBayesPropTest.fit` (Laplace or PG)."""
 
-    mean_delta: float = Field(..., description="Posterior mean of Delta = p_A - p_B (probability scale).")
-    ci_95: CredibleInterval = Field(..., description="95 % credible interval for Delta.")
-    p_A_greater_B: float = Field(..., alias="P(A > B)", ge=0, le=1, description="P(p_A > p_B).")
-    delta_A_posterior_mean: float = Field(..., description="Posterior mean of delta_A (logit scale).")
+    mean_delta: float = Field(
+        ..., description="Posterior mean of Delta = p_A - p_B (probability scale)."
+    )
+    ci_95: CredibleInterval = Field(
+        ..., description="95 % credible interval for Delta."
+    )
+    p_A_greater_B: float = Field(
+        ..., alias="P(A > B)", ge=0, le=1, description="P(p_A > p_B)."
+    )
+    delta_A_posterior_mean: float = Field(
+        ..., description="Posterior mean of delta_A (logit scale)."
+    )
 
     model_config = {"populate_by_name": True}
 
@@ -184,9 +249,13 @@ class PairedSummary(BaseModel):
 class PairedLaplaceConfig(BaseModel):
     """Configuration for :class:`PairedBayesPropTest` (Laplace approximation)."""
 
-    prior_sigma_delta: float = Field(default=1.0, gt=0, description="SD of N(0, sigma) prior on delta_A.")
+    prior_sigma_delta: float = Field(
+        default=1.0, gt=0, description="SD of N(0, sigma) prior on delta_A."
+    )
     seed: int = Field(default=0, description="Random seed.")
-    n_samples: int = Field(default=8_000, gt=0, description="Number of Laplace posterior draws.")
+    n_samples: int = Field(
+        default=8_000, gt=0, description="Number of Laplace posterior draws."
+    )
 
 
 # ====================================================================== #
@@ -197,11 +266,19 @@ class PairedLaplaceConfig(BaseModel):
 class PairedPGConfig(BaseModel):
     """Configuration for :class:`PairedBayesPropTestPG` (PG Gibbs sampler)."""
 
-    prior_sigma_delta: float = Field(default=1.0, gt=0, description="SD of N(0, sigma) prior on delta_A.")
-    prior_sigma_mu: float = Field(default=2.0, gt=0, description="SD of N(0, sigma) prior on mu.")
+    prior_sigma_delta: float = Field(
+        default=1.0, gt=0, description="SD of N(0, sigma) prior on delta_A."
+    )
+    prior_sigma_mu: float = Field(
+        default=2.0, gt=0, description="SD of N(0, sigma) prior on mu."
+    )
     seed: int = Field(default=0, description="Random seed.")
-    n_iter: int = Field(default=2_000, gt=0, description="Total Gibbs iterations per chain.")
-    burn_in: int = Field(default=500, ge=0, description="Number of warm-up iterations to discard.")
+    n_iter: int = Field(
+        default=2_000, gt=0, description="Total Gibbs iterations per chain."
+    )
+    burn_in: int = Field(
+        default=500, ge=0, description="Number of warm-up iterations to discard."
+    )
     n_chains: int = Field(default=4, gt=0, description="Number of MCMC chains.")
 
 
@@ -238,15 +315,25 @@ class ROPEResult(BaseModel):
     rope_upper: float = Field(..., description="Upper bound of the ROPE.")
     ci_lower: float = Field(..., description="Lower bound of the credible interval.")
     ci_upper: float = Field(..., description="Upper bound of the credible interval.")
-    ci_mass: float = Field(default=0.95, ge=0, le=1, description="Mass of the credible interval.")
-    pct_in_rope: float = Field(..., ge=0, le=1, description="Fraction of posterior inside ROPE.")
-    pct_below_rope: float = Field(..., ge=0, le=1, description="Fraction of posterior below ROPE.")
-    pct_above_rope: float = Field(..., ge=0, le=1, description="Fraction of posterior above ROPE.")
+    ci_mass: float = Field(
+        default=0.95, ge=0, le=1, description="Mass of the credible interval."
+    )
+    pct_in_rope: float = Field(
+        ..., ge=0, le=1, description="Fraction of posterior inside ROPE."
+    )
+    pct_below_rope: float = Field(
+        ..., ge=0, le=1, description="Fraction of posterior below ROPE."
+    )
+    pct_above_rope: float = Field(
+        ..., ge=0, le=1, description="Fraction of posterior above ROPE."
+    )
     decision: str = Field(
         ...,
         description="Decision: 'Reject H0 — A practically better', 'Accept H0', or 'Undecided'.",
     )
-    interpretation: str = Field(..., description="Human-readable interpretation of the ROPE analysis.")
+    interpretation: str = Field(
+        ..., description="Human-readable interpretation of the ROPE analysis."
+    )
 
     @classmethod
     def from_samples(
@@ -312,7 +399,13 @@ class HypothesisDecision(BaseModel):
     will be populated.
     """
 
-    bayes_factor: SavageDickeyResult | None = Field(default=None, description="Savage-Dickey Bayes factor result.")
-    posterior_null: PosteriorProbH0Result | None = Field(default=None, description="Posterior probability of H₀.")
+    bayes_factor: SavageDickeyResult | None = Field(
+        default=None, description="Savage-Dickey Bayes factor result."
+    )
+    posterior_null: PosteriorProbH0Result | None = Field(
+        default=None, description="Posterior probability of H₀."
+    )
     rope: ROPEResult | None = Field(default=None, description="ROPE analysis result.")
-    rule: DecisionRuleType = Field(default="all", description="Which decision rule was applied.")
+    rule: DecisionRuleType = Field(
+        default="all", description="Which decision rule was applied."
+    )

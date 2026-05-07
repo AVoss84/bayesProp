@@ -101,7 +101,7 @@ class NonPairedBayesPropTest:
     Workflow:
         1. Binarize continuous scores at a threshold.
         2. Update Beta(alpha0, beta0) prior with observed pass/fail counts.
-        3. Compute P(theta_B > theta_A) via Gauss-Legendre quadrature.
+        3. Compute posterior probability of superiority P(theta_B > theta_A) via Gauss-Legendre quadrature.
     """
 
     def __init__(
@@ -173,7 +173,7 @@ class NonPairedBayesPropTest:
         return (y >= self.threshold).astype(float)
 
     def prob_greater(self, a1: float, b1: float, a2: float, b2: float) -> float:
-        """Compute P(theta1 > theta2) via Gauss-Legendre quadrature.
+        """Posterior probability of superiority P(theta1 > theta2) via Gauss-Legendre quadrature.
 
         Args:
             a1: Alpha parameter of the first Beta distribution.
@@ -182,8 +182,8 @@ class NonPairedBayesPropTest:
             b2: Beta parameter of the second Beta distribution.
 
         Returns:
-            Probability that a draw from Beta(a1, b1) exceeds
-            a draw from Beta(a2, b2).
+            Posterior probability of superiority, i.e. the probability
+            that a draw from Beta(a1, b1) exceeds a draw from Beta(a2, b2).
         """
         x, w = self._x, self._w
         log_pdf1 = (a1 - 1) * np.log(x) + (b1 - 1) * np.log(1 - x) - betaln(a1, b1)
@@ -199,7 +199,7 @@ class NonPairedBayesPropTest:
 
         Returns:
             :class:`NonPairedTestResult` with posterior Beta parameters
-            and P(theta_B > theta_A).
+            and posterior probability of superiority P(theta_B > theta_A).
         """
         y_a = self._binarize(np.asarray(y_a, dtype=float))
         y_b = self._binarize(np.asarray(y_b, dtype=float))
