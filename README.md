@@ -33,23 +33,22 @@ Please check out our [Getting Started](https://avoss84.github.io/bayesProp/getti
 ## Quick start
 
 ```python
-from bayesprop.resources.bayes_paired_pg import PairedBayesPropTestPG
-from bayesprop.utils.utils import simulate_paired_scores
+from bayesprop.resources.bayes_nonpaired import NonPairedBayesPropTest
+from bayesprop.utils.utils import simulate_nonpaired_scores
 
-# Simulate paired binary data
-sim = simulate_paired_scores(N=200, delta_A=0.5, seed=42)
+# Simulate independent binary data
+sim = simulate_nonpaired_scores(N=200, theta_A=0.75, theta_B=0.60, seed=42)
 y_A, y_B = sim.y_A, sim.y_B
 
 # Fit & summarise
-model = PairedBayesPropTestPG(seed=42, n_iter=2000, burn_in=500, n_chains=4).fit(y_A, y_B)
-print(model.summary)           # PairedSummary with mean_delta, ci_95, P(A>B), …
+model = NonPairedBayesPropTest(seed=42).fit(y_A, y_B)
+print(model.summary)           # NonPairedSummary with mean_delta, ci_95, P(A>B), …
 
 # Hypothesis test
 bf = model.savage_dickey_test() # SavageDickeyResult with BF_10, decision, …
 
 # Plots
 model.plot_posteriors()
-model.plot_ppc(seed=42)
 model.plot_savage_dickey()
 ```
 
