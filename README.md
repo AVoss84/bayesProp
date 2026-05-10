@@ -59,7 +59,7 @@ model.plot_savage_dickey()
 ├── justfile                   # task runner (just <recipe>)
 ├── .pre-commit-config.yaml    # ruff format + lint hooks
 ├── data/                      # evaluation datasets
-├── docs/                      # model derivations & MkDocs site
+├── docs/                      # documentation source
 ├── src
 │   ├── bayesprop
 │   │   ├── config/            # global_config, YAML configs
@@ -78,12 +78,6 @@ model.plot_savage_dickey()
 │       ├── bayesian_AB_model_comparison_paired_laplace.ipynb
 │       └── bayesian_AB_model_comparison_paired_gibbs.ipynb
 └── tests/
-    ├── test_bayes_nonpaired.py
-    ├── test_bayes_paired_laplace.py
-    ├── test_bayes_paired_pg.py
-    ├── test_bfda_utils.py
-    ├── test_data_schemas.py
-    └── test_file_services.py
 ```
 
 ## Installation
