@@ -20,7 +20,8 @@ Please check out our [Getting Started](https://avoss84.github.io/bayesProp/getti
 - **Posterior of the null & ROPE** — quantify the posterior mass inside a Region of Practical Equivalence for nuanced decisions beyond simple reject/accept
 - **Posterior predictive checks** — assess model fit by comparing observed data to data simulated from the posterior
 - **Bayes Factor Design Analysis (BFDA)** — plan sample sizes to reach a target level of evidence *before* running the experiment
-- **Publication-ready plots** — posterior distributions, predictive checks, Savage–Dickey density-ratio plots, and BFDA power curves out of the box
+- **Sequential / streaming design** — update the posterior batch-by-batch as data arrive and stop early once the Bayes factor crosses an upper or lower threshold (`SequentialNonPairedBayesPropTest`, `SequentialPairedBayesPropTest`)
+- **Publication-ready plots** — posterior distributions, predictive checks, Savage–Dickey density-ratio plots, BFDA power curves, and sequential BF₁₀ trajectories out of the box
 
 ## Models
 
@@ -76,7 +77,9 @@ model.plot_savage_dickey()
 │   └── notebooks/
 │       ├── bayesian_AB_model_comparison_nonpaired.ipynb
 │       ├── bayesian_AB_model_comparison_paired_laplace.ipynb
-│       └── bayesian_AB_model_comparison_paired_gibbs.ipynb
+│       ├── bayesian_AB_model_comparison_paired_gibbs.ipynb
+│       ├── sequential_nonpaired_demo.ipynb
+│       └── sequential_paired_laplace_demo.ipynb
 └── tests/
 ```
 

@@ -11,7 +11,9 @@ matplotlib.use("Agg")
 
 from bayesprop.resources.bayes_paired_laplace import (
     PairedBayesPropTest,
+    SequentialPairedBayesPropTest,
     _format_bf,
+    _paired_laplace_from_counts,
     sigmoid,
 )
 from bayesprop.resources.data_schemas import (
@@ -21,6 +23,8 @@ from bayesprop.resources.data_schemas import (
     PPCStatistic,
     ROPEResult,
     SavageDickeyResult,
+    SequentialLaplaceLookResult,
+    SequentialLaplaceState,
 )
 
 # ── Fixtures ──────────────────────────────────────────────────
@@ -129,7 +133,9 @@ class TestPairedLaplaceFit:
         assert "map" in fitted_model.laplace
         assert "cov" in fitted_model.laplace
 
-    def test_trace_summary_is_dataframe(self, fitted_model: PairedBayesPropTest) -> None:
+    def test_trace_summary_is_dataframe(
+        self, fitted_model: PairedBayesPropTest
+    ) -> None:
         assert isinstance(fitted_model.trace_summary, pd.DataFrame)
 
     def test_known_effect_detected(self) -> None:
@@ -143,7 +149,9 @@ class TestPairedLaplaceFit:
 class TestPairedLaplaceSavageDickey:
     """Tests for PairedBayesPropTest.savage_dickey_test()."""
 
-    def test_returns_savage_dickey_result(self, fitted_model: PairedBayesPropTest) -> None:
+    def test_returns_savage_dickey_result(
+        self, fitted_model: PairedBayesPropTest
+    ) -> None:
         result = fitted_model.savage_dickey_test()
         assert isinstance(result, SavageDickeyResult)
 
@@ -229,7 +237,9 @@ class TestPairedLaplacePlots:
 
         plt.close("all")
 
-    def test_print_summary(self, fitted_model: PairedBayesPropTest, capsys: pytest.CaptureFixture[str]) -> None:
+    def test_print_summary(
+        self, fitted_model: PairedBayesPropTest, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         fitted_model.print_summary()
         captured = capsys.readouterr()
         assert "P(A > B)" in captured.out
@@ -256,7 +266,9 @@ class TestPairedLaplaceRopeTest:
 class TestPairedLaplaceDecide:
     """Tests for PairedBayesPropTest.decide method."""
 
-    def test_returns_hypothesis_decision(self, fitted_model: PairedBayesPropTest) -> None:
+    def test_returns_hypothesis_decision(
+        self, fitted_model: PairedBayesPropTest
+    ) -> None:
         d = fitted_model.decide()
         assert isinstance(d, HypothesisDecision)
 
@@ -329,7 +341,9 @@ class TestPairedLaplaceDGPRecovery:
             (0.5, 0.8, 500),  # non-zero intercept
         ],
     )
-    def test_delta_A_posterior_covers_truth(self, mu: float, delta_A: float, N: int) -> None:
+    def test_delta_A_posterior_covers_truth(
+        self, mu: float, delta_A: float, N: int
+    ) -> None:
         """Logit-scale δ_A posterior samples should cover the true value (95% CI)."""
         from bayesprop.utils.utils import simulate_paired_scores
 
@@ -339,7 +353,9 @@ class TestPairedLaplaceDGPRecovery:
         # CI on the logit-scale δ_A
         lo = float(np.quantile(model.delta_A_samples, 0.025))
         hi = float(np.quantile(model.delta_A_samples, 0.975))
-        assert lo <= delta_A <= hi, f"True δ_A={delta_A:.3f} not in 95% CI [{lo:.3f}, {hi:.3f}]"
+        assert (
+            lo <= delta_A <= hi
+        ), f"True δ_A={delta_A:.3f} not in 95% CI [{lo:.3f}, {hi:.3f}]"
 
     def test_mean_delta_A_close_to_truth(self) -> None:
         """Posterior mean of logit-scale δ_A should be close to the true value."""
@@ -393,3 +409,269 @@ class TestPairedLaplaceDGPRecovery:
 
         map_delta = model.laplace["map"][1]  # index 1 is delta_A
         assert abs(map_delta - delta_A) < 0.25
+
+
+# ── _paired_laplace_from_counts ───────────────────────────────
+
+
+class TestPairedLaplaceFromCounts:
+    """Tests for the count-based Laplace helper."""
+
+    def test_matches_batch_fit_on_same_counts(self) -> None:
+        """Count-based MAP/cov must match a full PairedBayesPropTest.fit()."""
+        rng = np.random.default_rng(0)
+        y_a = rng.binomial(1, 0.75, size=200)
+        y_b = rng.binomial(1, 0.55, size=200)
+
+        batch = PairedBayesPropTest(prior_sigma_delta=1.0, seed=0, n_samples=2_000).fit(
+            y_a, y_b
+        )
+
+        theta_map, cov, H = _paired_laplace_from_counts(
+            n_A=int(len(y_a)),
+            k_A=int(y_a.sum()),
+            n_B=int(len(y_b)),
+            k_B=int(y_b.sum()),
+            prior_sigma_delta=1.0,
+        )
+        assert theta_map[0] == pytest.approx(batch.laplace["map"][0], abs=1e-6)
+        assert theta_map[1] == pytest.approx(batch.laplace["map"][1], abs=1e-6)
+        assert cov == pytest.approx(batch.laplace["cov"], abs=1e-8)
+        assert H == pytest.approx(batch.laplace["H"], abs=1e-8)
+
+    def test_warm_start_is_close(self) -> None:
+        """A warm-start near the optimum should still converge."""
+        theta_map_a, _, _ = _paired_laplace_from_counts(
+            n_A=80, k_A=60, n_B=80, k_B=45, prior_sigma_delta=1.0
+        )
+        theta_map_b, _, _ = _paired_laplace_from_counts(
+            n_A=80,
+            k_A=60,
+            n_B=80,
+            k_B=45,
+            prior_sigma_delta=1.0,
+            x0=(float(theta_map_a[0]), float(theta_map_a[1])),
+        )
+        assert theta_map_a == pytest.approx(theta_map_b, abs=1e-4)
+
+    def test_extreme_warm_start_still_converges(self) -> None:
+        """Backtracking line search must rescue a wildly-off warm-start."""
+        theta_ref, _, _ = _paired_laplace_from_counts(
+            n_A=120, k_A=80, n_B=120, k_B=50, prior_sigma_delta=1.0
+        )
+        theta_far, _, _ = _paired_laplace_from_counts(
+            n_A=120,
+            k_A=80,
+            n_B=120,
+            k_B=50,
+            prior_sigma_delta=1.0,
+            x0=(20.0, -20.0),
+        )
+        assert theta_far == pytest.approx(theta_ref, abs=1e-5)
+
+    def test_hessian_positive_definite(self) -> None:
+        """Returned Hessian must be symmetric positive definite."""
+        _, cov, H = _paired_laplace_from_counts(
+            n_A=50, k_A=30, n_B=50, k_B=25, prior_sigma_delta=1.0
+        )
+        assert H[0, 1] == pytest.approx(H[1, 0])
+        eigvals = np.linalg.eigvalsh(H)
+        assert np.all(eigvals > 0)
+        # cov must be the inverse: H @ cov ≈ I.
+        assert (H @ cov) == pytest.approx(np.eye(2), abs=1e-10)
+
+    def test_gradient_vanishes_at_map(self) -> None:
+        """At the returned MAP the gradient should be (numerically) zero."""
+        n_A, k_A, n_B, k_B = 200, 130, 200, 90
+        prior_sigma_delta, prior_sigma_mu = 1.0, 2.0
+        theta_map, _, _ = _paired_laplace_from_counts(
+            n_A=n_A,
+            k_A=k_A,
+            n_B=n_B,
+            k_B=k_B,
+            prior_sigma_delta=prior_sigma_delta,
+        )
+        mu, delta = float(theta_map[0]), float(theta_map[1])
+        p_A = 1.0 / (1.0 + np.exp(-(mu + delta)))
+        p_B = 1.0 / (1.0 + np.exp(-mu))
+        g_mu = (k_A - n_A * p_A) + (k_B - n_B * p_B) - mu / prior_sigma_mu**2
+        g_delta = (k_A - n_A * p_A) - delta / prior_sigma_delta**2
+        assert abs(g_mu) < 1e-7
+        assert abs(g_delta) < 1e-7
+
+
+# ── SequentialPairedBayesPropTest ─────────────────────────────
+
+
+class TestSequentialPaired:
+    """Tests for SequentialPairedBayesPropTest."""
+
+    def test_initial_state(self) -> None:
+        seq = SequentialPairedBayesPropTest(prior_sigma_delta=1.0)
+        assert seq.n_A == 0 and seq.n_B == 0
+        assert seq.successes_A == 0 and seq.successes_B == 0
+        assert seq.history == []
+        assert not seq.stopped
+        assert seq.stop_reason is None
+        assert seq.last_model is None
+
+    def test_invalid_thresholds_rejected(self) -> None:
+        with pytest.raises(ValueError):
+            SequentialPairedBayesPropTest(bf_upper=5.0, bf_lower=10.0)
+        with pytest.raises(ValueError):
+            SequentialPairedBayesPropTest(bf_lower=0.0)
+
+    def test_rejects_non_binary_input(self) -> None:
+        seq = SequentialPairedBayesPropTest()
+        with pytest.raises(ValueError):
+            seq.update(np.array([0.5, 1.0]), np.array([0, 1]))
+
+    def test_rejects_unequal_paired_batches(self) -> None:
+        seq = SequentialPairedBayesPropTest()
+        with pytest.raises(ValueError):
+            seq.update(np.array([0, 1, 1]), np.array([0, 1]))
+
+    def test_sequential_matches_batch_fit(self) -> None:
+        """Streaming refits must reproduce a single batch fit exactly."""
+        rng = np.random.default_rng(11)
+        y_a = rng.binomial(1, 0.7, size=90).astype(int)
+        y_b = rng.binomial(1, 0.5, size=90).astype(int)
+
+        seq = SequentialPairedBayesPropTest(
+            prior_sigma_delta=1.0,
+            bf_upper=1e12,
+            bf_lower=1e-12,
+            n_max=10**6,
+            seed=0,
+            n_samples=2_000,
+        )
+        for chunk in range(3):
+            sl = slice(chunk * 30, (chunk + 1) * 30)
+            seq.update(y_a[sl], y_b[sl])
+
+        last = seq.history[-1]
+        batch = PairedBayesPropTest(prior_sigma_delta=1.0, seed=0, n_samples=2_000).fit(
+            y_a, y_b
+        )
+        assert last.posterior_state.mu_map == pytest.approx(
+            batch.laplace["map"][0], abs=1e-4
+        )
+        assert last.posterior_state.delta_A_map == pytest.approx(
+            batch.laplace["map"][1], abs=1e-4
+        )
+        assert np.asarray(last.posterior_state.cov) == pytest.approx(
+            batch.laplace["cov"], abs=1e-4
+        )
+
+    def test_snapshot_types(self) -> None:
+        rng = np.random.default_rng(2)
+        ya = rng.binomial(1, 0.6, size=60).astype(int)
+        yb = rng.binomial(1, 0.5, size=60).astype(int)
+        seq = SequentialPairedBayesPropTest(seed=2, n_samples=1_500)
+        snap = seq.update(ya, yb)
+
+        assert isinstance(snap, SequentialLaplaceLookResult)
+        assert isinstance(snap.posterior_state, SequentialLaplaceState)
+        assert isinstance(snap.decision, HypothesisDecision)
+        assert snap.decision.bayes_factor is not None
+        assert snap.decision.rope is not None
+        assert snap.look == 1
+        assert snap.n_A == 60 and snap.n_B == 60
+        assert seq.last_model is not None
+
+    def test_stopping_on_bf_upper(self) -> None:
+        """A strong effect should trigger BF10 ≥ bf_upper."""
+        rng = np.random.default_rng(7)
+        batches = [
+            (
+                rng.binomial(1, 0.85, size=40).astype(int),
+                rng.binomial(1, 0.35, size=40).astype(int),
+            )
+            for _ in range(15)
+        ]
+        seq = SequentialPairedBayesPropTest(
+            prior_sigma_delta=1.0,
+            bf_upper=10.0,
+            bf_lower=0.1,
+            n_min=20,
+            seed=7,
+            n_samples=2_000,
+        )
+        final = seq.run(batches)
+        assert seq.stopped
+        assert "H1" in seq.stop_reason
+        assert final.decision.bayes_factor.BF_10 >= 10.0
+
+    def test_stopping_on_n_max(self) -> None:
+        rng = np.random.default_rng(3)
+        batches = [
+            (
+                rng.binomial(1, 0.50, size=10).astype(int),
+                rng.binomial(1, 0.50, size=10).astype(int),
+            )
+            for _ in range(20)
+        ]
+        seq = SequentialPairedBayesPropTest(
+            bf_upper=1e9,
+            bf_lower=1e-9,
+            n_max=40,
+            seed=3,
+            n_samples=1_000,
+        )
+        final = seq.run(batches)
+        assert seq.stopped
+        assert seq.stop_reason == "n_max reached"
+        assert final.n_A >= 40 and final.n_B >= 40
+
+    def test_update_after_stop_raises(self) -> None:
+        rng = np.random.default_rng(4)
+        ya = rng.binomial(1, 0.9, size=200).astype(int)
+        yb = rng.binomial(1, 0.3, size=200).astype(int)
+        seq = SequentialPairedBayesPropTest(
+            bf_upper=3.0,
+            n_min=10,
+            seed=4,
+            n_samples=1_500,
+        )
+        seq.update(ya, yb)
+        assert seq.stopped
+        with pytest.raises(RuntimeError):
+            seq.update(ya[:5], yb[:5])
+
+    def test_run_empty_batches_raises(self) -> None:
+        seq = SequentialPairedBayesPropTest()
+        with pytest.raises(ValueError):
+            seq.run(iter(()))
+
+    def test_history_frame_columns(self) -> None:
+        rng = np.random.default_rng(5)
+        ya = rng.binomial(1, 0.6, size=40).astype(int)
+        yb = rng.binomial(1, 0.5, size=40).astype(int)
+        seq = SequentialPairedBayesPropTest(seed=5, n_samples=1_000)
+        seq.update(ya, yb)
+        df = seq.history_frame()
+        assert {
+            "look",
+            "n_A",
+            "n_B",
+            "mu_MAP",
+            "delta_A_MAP",
+            "P_A_gt_B",
+            "BF_10",
+            "BF_01",
+            "pct_in_rope",
+            "stop",
+            "stop_reason",
+        }.issubset(df.columns)
+
+    def test_plot_trajectory_runs(self) -> None:
+        import matplotlib.pyplot as plt
+
+        rng = np.random.default_rng(6)
+        seq = SequentialPairedBayesPropTest(seed=6, n_samples=1_000)
+        for _ in range(3):
+            ya = rng.binomial(1, 0.65, size=30).astype(int)
+            yb = rng.binomial(1, 0.45, size=30).astype(int)
+            seq.update(ya, yb)
+        seq.plot_trajectory()
+        plt.close("all")

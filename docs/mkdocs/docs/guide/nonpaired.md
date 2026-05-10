@@ -420,7 +420,7 @@ for name, a0, b0 in priors:
 If the conclusion is stable across priors, you can be confident the result is
 not an artifact of the prior choice.
 
-## Posterior concentration with increasing $n$
+## Posterior concentration with increasing n
 
 As the sample size grows, the posterior of $\Delta$ concentrates around the
 true effect size. This plot shows how precision improves:

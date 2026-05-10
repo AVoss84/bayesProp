@@ -94,6 +94,19 @@ $$
 
 where $w_A = p_A(1 - p_A)$ and $w_B = p_B(1 - p_B)$, evaluated at the MAP.
 
+### Solver
+
+The MAP is found by **damped Newton iteration** in 2D using the closed-form
+gradient and Hessian above (no external optimizer is invoked). Each step
+solves the $2\times 2$ system $\mathbf{H}\,\Delta\boldsymbol{\theta} = -\nabla(-\log p)$
+in closed form via the cofactor inverse, and an Armijo backtracking line
+search guarantees monotone descent even from a poor starting point.
+
+Because the negative log-posterior is strictly convex (Gaussian priors plus
+Bernoulli likelihood), Newton converges quadratically. The
+:class:`SequentialPairedBayesPropTest` warm-starts each look from the
+previous MAP, which typically requires only **1–3 iterations** per update.
+
 ## When to use
 
 - **Fast inference** — no MCMC, results in milliseconds
@@ -202,7 +215,7 @@ Or use the built-in method:
 model.plot_laplace_posterior()
 ```
 
-### 5. Posterior of $\Delta$ on the probability scale
+### 5. Posterior of Delta on the probability scale
 
 ```python
 model.plot_posterior_delta()
@@ -284,7 +297,7 @@ PairedBayesPropTest.print_comparison_table(comparison_results)
 
 ## Prior sensitivity analysis
 
-### Sensitivity to prior $P(H_0)$
+### Sensitivity to prior P(H0)
 
 Plot how the posterior $P(H_0 \mid D)$ changes as you vary the prior
 $\pi_0 = P(H_0)$:
@@ -295,7 +308,7 @@ model.plot_sensitivity(prior_H0=0.5)
 
 ![Sensitivity to prior P(H₀)](../images/paired-laplace/sensitivity_prior_h0_binomial.png)
 
-### Sensitivity to slab width $\sigma_s$
+### Sensitivity to slab width sigma_s
 
 The Savage-Dickey BF depends on the prior at $\delta_A = 0$. For a
 $\mathcal{N}(0, \sigma_s)$ slab prior, a wider slab concentrates less
@@ -387,6 +400,95 @@ plot_bfda_power(
 
 See the [BFDA guide](bfda.md) for sensitivity analysis and $P(H_0)$-based
 power curves.
+
+## Sequential design and decision making
+
+In a **sequential** paired A/B test the binary observations arrive in
+batches over time and we update the Laplace posterior after each look.
+The pooled Bernoulli logistic likelihood depends on the data only through
+the four sufficient statistics $(n_A, k_A, n_B, k_B)$, so the cumulative
+counts carry **all** the information needed to recompute the
+Savage-Dickey Bayes factor on $\delta_A = 0$, the posterior probability
+$P(p_A > p_B)$ on the probability scale, and a ROPE decision at every
+look. Refitting on the running counts therefore yields *exactly* the
+same Laplace posterior as fitting all accumulated data in one shot —
+streaming introduces **no** additional approximation on top of the
+Laplace step itself.
+
+Each refit is a damped Newton solve in 2D warm-started from the previous
+MAP, which typically converges in 1-3 iterations.
+
+### Stopping rule
+
+At each look $t$ the test evaluates the running $\text{BF}_{10}^{(t)}$ and
+stops as soon as one of the following holds:
+
+- $\text{BF}_{10}^{(t)} \ge B_U$ (`bf_upper`) -> stop for $H_1$ (evidence of a difference).
+- $\text{BF}_{10}^{(t)} \le B_L$ (`bf_lower`) -> stop for $H_0$ (evidence of practical equivalence).
+- $\min(n_A^{(t)}, n_B^{(t)}) \ge n_{\max}$ -> stop because the budget is exhausted.
+
+Because the Laplace posterior is a coherent likelihood-based object,
+optional stopping is permitted: performing many looks does **not** inflate
+a frequentist Type-I rate the way repeated $p$-values would.
+
+### Example: streaming paired Bernoulli batches
+
+Ground truth on the logit scale: $\mu = 0.5$, $\delta_A = 0.6$. Each look
+delivers a batch of 25 paired observations.
+
+```python
+import numpy as np
+from bayesprop.resources.bayes_paired_laplace import SequentialPairedBayesPropTest
+
+rng = np.random.default_rng(42)
+p_A_true, p_B_true = 0.75, 0.62
+
+def stream(n_batches: int = 40, batch_size: int = 25):
+    for _ in range(n_batches):
+        yield (
+            rng.binomial(1, p_A_true, size=batch_size),
+            rng.binomial(1, p_B_true, size=batch_size),
+        )
+
+seq = SequentialPairedBayesPropTest(
+    prior_sigma_delta=1.0,
+    bf_upper=10.0,
+    bf_lower=0.1,
+    n_max=1000,
+)
+final = seq.run(stream())
+
+print("Stopped:", seq.stopped, "after", len(seq.history), "looks")
+print("Reason :", seq.stop_reason)
+```
+
+### Inspect the final snapshot and history
+
+The last `SequentialLaplaceLookResult` exposes the same diagnostics as
+the batch test (Laplace posterior state, $P(p_A > p_B)$, Savage-Dickey
+BF, ROPE), and `history_frame()` returns one row per look:
+
+```python
+ps = final.posterior_state
+print(f"MAP: mu={ps.mu_map:.4f}, delta_A={ps.delta_A_map:.4f}")
+print(f"P(p_A > p_B) = {final.P_A_greater_B:.4f}")
+print(f"BF10 = {final.decision.bayes_factor.BF_10:.3g}")
+print(f"ROPE decision: {final.decision.rope.decision}")
+
+df = seq.history_frame()       # per-look DataFrame
+seq.plot_trajectory()           # BF10 and P(A>B) vs cumulative n
+```
+
+### Equivalence to a single-shot fit
+
+Because the Laplace posterior depends only on the cumulative
+sufficient statistics, fitting all accumulated data in one shot yields
+the **same** MAP and covariance as the sequential refit at the final
+look — i.e. `seq.last_model` matches a `PairedBayesPropTest().fit(...)`
+on the materialised cumulative arrays.
+
+See the runnable notebook at
+`src/notebooks/sequential_paired_laplace_demo.ipynb` for the full demo.
 
 ## API
 

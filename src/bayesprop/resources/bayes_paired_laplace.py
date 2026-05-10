@@ -26,12 +26,11 @@ For multi-metric comparisons::
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Iterable
 
 import numpy as np
 import numpy.typing as npt
 import pandas as pd
-from scipy.optimize import minimize
 from scipy.stats import gaussian_kde, norm
 
 from bayesprop.resources.data_schemas import (
@@ -43,6 +42,8 @@ from bayesprop.resources.data_schemas import (
     PPCStatistic,
     ROPEResult,
     SavageDickeyResult,
+    SequentialLaplaceLookResult,
+    SequentialLaplaceState,
 )
 
 
@@ -59,6 +60,116 @@ def _format_bf(value: float) -> str:
         return f"10^{np.log10(value):.0f}"
     else:
         return f"{value:.2f}"
+
+
+def _paired_laplace_from_counts(
+    n_A: int,
+    k_A: int,
+    n_B: int,
+    k_B: int,
+    prior_sigma_delta: float,
+    prior_sigma_mu: float = 2.0,
+    x0: tuple[float, float] = (0.0, 0.0),
+    tol: float = 1e-8,
+    max_iter: int = 50,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Compute the Laplace posterior of (mu, delta_A) directly from counts.
+
+    Solves for the MAP via damped Newton iterations using the closed-form
+    gradient and Hessian of the pooled Bernoulli logistic log-posterior
+    (no raw data is materialised, no external optimizer invoked). The
+    objective depends on the data only through the four sufficient
+    statistics ``(n_A, k_A, n_B, k_B)``.
+
+    Newton converges quadratically; warm-starting ``x0`` from the
+    previous MAP (as the sequential test does) typically requires only
+    1-3 iterations per update.
+
+    Args:
+        n_A: Cumulative sample size for arm A.
+        k_A: Cumulative successes for arm A.
+        n_B: Cumulative sample size for arm B.
+        k_B: Cumulative successes for arm B.
+        prior_sigma_delta: Std of the N(0, sigma) prior on delta_A.
+        prior_sigma_mu: Std of the N(0, sigma) prior on mu.
+        x0: Warm-start for Newton as (mu0, delta0).
+        tol: Convergence tolerance on the gradient infinity-norm.
+        max_iter: Maximum number of Newton iterations.
+
+    Returns:
+        Tuple ``(theta_map, cov, H)`` where ``theta_map`` is the MAP
+        of ``(mu, delta_A)``, ``cov`` is the 2x2 Laplace covariance
+        (closed-form inverse of the observed information), and ``H`` is
+        the 2x2 Hessian of the negative log-posterior at the MAP.
+    """
+    inv_var_mu = 1.0 / (prior_sigma_mu**2)
+    inv_var_delta = 1.0 / (prior_sigma_delta**2)
+
+    def neg_log_post(mu_: float, delta_: float) -> float:
+        """Closed-form negative log-posterior up to an additive constant."""
+        zA = mu_ + delta_
+        zB = mu_
+        # softplus via np.logaddexp(0, x) for numerical stability.
+        nll = (
+            k_A * np.logaddexp(0.0, -zA)
+            + (n_A - k_A) * np.logaddexp(0.0, zA)
+            + k_B * np.logaddexp(0.0, -zB)
+            + (n_B - k_B) * np.logaddexp(0.0, zB)
+        )
+        nlp = 0.5 * inv_var_mu * mu_ * mu_ + 0.5 * inv_var_delta * delta_ * delta_
+        return float(nll + nlp)
+
+    def hessian_terms(p_A: float, p_B: float) -> tuple[float, float, float, float]:
+        """Closed-form Hessian of the negative log-posterior at (mu, delta).
+
+        Returns the unique entries (a, b, c) of the symmetric 2x2 matrix
+        ``H = [[a, c], [c, b]]`` (always positive definite here) along
+        with its determinant ``det = a*b - c*c``.
+        """
+        w_A = p_A * (1.0 - p_A)
+        w_B = p_B * (1.0 - p_B)
+        a_ = n_A * w_A + n_B * w_B + inv_var_mu
+        b_ = n_A * w_A + inv_var_delta
+        c_ = n_A * w_A
+        return a_, b_, c_, a_ * b_ - c_ * c_
+
+    mu, delta = float(x0[0]), float(x0[1])
+    a = b = c = det = 0.0  # populated each iteration; reused for cov
+    for _ in range(max_iter):
+        # Gradient of negative log-posterior.
+        p_A = 1.0 / (1.0 + np.exp(-(mu + delta)))
+        p_B = 1.0 / (1.0 + np.exp(-mu))
+        g_mu = -((k_A - n_A * p_A) + (k_B - n_B * p_B) - inv_var_mu * mu)
+        g_delta = -((k_A - n_A * p_A) - inv_var_delta * delta)
+
+        a, b, c, det = hessian_terms(p_A, p_B)
+
+        if max(abs(g_mu), abs(g_delta)) < tol:
+            break
+
+        # Newton step: dx = -H^{-1} g, using closed-form 2x2 inverse.
+        d_mu = -(b * g_mu - c * g_delta) / det
+        d_delta = -(-c * g_mu + a * g_delta) / det
+
+        # Backtracking line search (Armijo with c1=1e-4) to guarantee descent
+        # even from a poor warm-start. The full Newton step is accepted on the
+        # first try in the typical warm-started case, so this adds ~1 objective
+        # evaluation per iteration in steady state.
+        old_obj = neg_log_post(mu, delta)
+        directional = g_mu * d_mu + g_delta * d_delta  # = -g^T H^{-1} g <= 0
+        step = 1.0
+        for _ in range(20):
+            new_mu = mu + step * d_mu
+            new_delta = delta + step * d_delta
+            if neg_log_post(new_mu, new_delta) <= old_obj + 1e-4 * step * directional:
+                break
+            step *= 0.5
+        mu, delta = new_mu, new_delta
+
+    H = np.array([[a, c], [c, b]])
+    cov = np.array([[b, -c], [-c, a]]) / det
+
+    return np.array([mu, delta]), cov, H
 
 
 class PairedBayesPropTest:
@@ -134,9 +245,12 @@ class PairedBayesPropTest:
     def fit(self, y_A_obs: np.ndarray, y_B_obs: np.ndarray) -> PairedBayesPropTest:
         """Fit the pooled Bernoulli model via Laplace approximation.
 
-        Analytically computes the MAP via L-BFGS-B on the negative
-        log-posterior, then evaluates the closed-form Hessian at the
-        MAP to obtain the Laplace covariance: Σ = H⁻¹.
+        Reduces ``(y_A_obs, y_B_obs)`` to the four sufficient statistics
+        ``(n_A, k_A, n_B, k_B)`` and delegates to
+        :func:`_paired_laplace_from_counts`, which solves for the MAP
+        via damped Newton (closed-form 2x2 gradient and Hessian, with
+        Armijo backtracking line search) and returns the Laplace
+        covariance ``Σ = H⁻¹``.
 
         Log-posterior (up to constant)::
 
@@ -167,60 +281,24 @@ class PairedBayesPropTest:
         self.y_A_obs = np.asarray(y_A_obs, dtype=int)
         self.y_B_obs = np.asarray(y_B_obs, dtype=int)
 
-        rng = np.random.default_rng(self.seed)
-
-        n_A = len(self.y_A_obs)
+        n_A = int(len(self.y_A_obs))
         k_A = int(self.y_A_obs.sum())
-        n_B = len(self.y_B_obs)
+        n_B = int(len(self.y_B_obs))
         k_B = int(self.y_B_obs.sum())
-        sigma_mu = 2.0
-        sigma_delta = self.prior_sigma_delta
 
-        def neg_log_post(params: np.ndarray) -> float:
-            mu, delta = params
-            p_A = sigmoid(mu + delta)
-            p_B = sigmoid(mu)
-            # Clip to avoid log(0)
-            eps = 1e-15
-            p_A = np.clip(p_A, eps, 1 - eps)
-            p_B = np.clip(p_B, eps, 1 - eps)
-            ll = k_A * np.log(p_A) + (n_A - k_A) * np.log(1 - p_A)
-            ll += k_B * np.log(p_B) + (n_B - k_B) * np.log(1 - p_B)
-            lp = -(mu**2) / (2 * sigma_mu**2) - delta**2 / (2 * sigma_delta**2)
-            return -(ll + lp)
-
-        def neg_log_post_grad(params: np.ndarray) -> np.ndarray:
-            mu, delta = params
-            p_A = sigmoid(mu + delta)
-            p_B = sigmoid(mu)
-            g_mu = (k_A - n_A * p_A) + (k_B - n_B * p_B) - mu / sigma_mu**2
-            g_delta = (k_A - n_A * p_A) - delta / sigma_delta**2
-            return -np.array([g_mu, g_delta])
-
-        result = minimize(
-            neg_log_post,
-            x0=np.array([0.0, 0.0]),
-            jac=neg_log_post_grad,
-            method="L-BFGS-B",
+        # Closed-form MAP + Hessian directly from sufficient statistics.
+        theta_map, cov, H = _paired_laplace_from_counts(
+            n_A=n_A,
+            k_A=k_A,
+            n_B=n_B,
+            k_B=k_B,
+            prior_sigma_delta=self.prior_sigma_delta,
         )
-        mu_map, delta_map = result.x
-
-        # Analytical Hessian of negative log-posterior at MAP
-        p_A_map = sigmoid(mu_map + delta_map)
-        p_B_map = sigmoid(mu_map)
-        w_A = p_A_map * (1 - p_A_map)
-        w_B = p_B_map * (1 - p_B_map)
-
-        H = np.array(
-            [
-                [n_A * w_A + n_B * w_B + 1 / sigma_mu**2, n_A * w_A],
-                [n_A * w_A, n_A * w_A + 1 / sigma_delta**2],
-            ]
-        )
-        cov = np.linalg.inv(H)
+        mu_map, delta_map = float(theta_map[0]), float(theta_map[1])
 
         # Sample from Gaussian posterior
-        samples = rng.multivariate_normal([mu_map, delta_map], cov, size=self.n_samples)
+        rng = np.random.default_rng(self.seed)
+        samples = rng.multivariate_normal(theta_map, cov, size=self.n_samples)
         mu_s = samples[:, 0]
         delta_A_s = samples[:, 1]
 
@@ -259,15 +337,15 @@ class PairedBayesPropTest:
         )
 
         self.laplace = {
-            "map": np.array([mu_map, delta_map]),
+            "map": theta_map,
             "cov": cov,
             "H": H,
             "mu_samples": mu_s,
             "delta_A_samples": delta_A_s,
-            "n_A": len(self.y_A_obs),
-            "k_A": int(self.y_A_obs.sum()),
-            "n_B": len(self.y_B_obs),
-            "k_B": int(self.y_B_obs.sum()),
+            "n_A": n_A,
+            "k_A": k_A,
+            "n_B": n_B,
+            "k_B": k_B,
             "prior_sigma_delta": self.prior_sigma_delta,
         }
 
@@ -336,7 +414,9 @@ class PairedBayesPropTest:
         )
 
     @staticmethod
-    def posterior_probability_H0(BF_01: float, prior_H0: float = 0.5) -> PosteriorProbH0Result:
+    def posterior_probability_H0(
+        BF_01: float, prior_H0: float = 0.5
+    ) -> PosteriorProbH0Result:
         """Convert BF_01 to posterior probability of H0 (spike-and-slab).
 
         Args:
@@ -422,7 +502,9 @@ class PairedBayesPropTest:
         if rule in ("rope", "all"):
             rp = self.rope_test()
 
-        return HypothesisDecision(bayes_factor=bf, posterior_null=pn, rope=rp, rule=rule)
+        return HypothesisDecision(
+            bayes_factor=bf, posterior_null=pn, rope=rp, rule=rule
+        )
 
     # ------------------------------------------------------------------ #
     #  Diagnostics
@@ -538,8 +620,12 @@ class PairedBayesPropTest:
         )
         ax.fill_between(x, pdf_B, alpha=0.15, color="#4CAF50")
 
-        ax.axvline(p_A_s.mean(), color="#2196F3", linestyle="--", linewidth=1, alpha=0.6)
-        ax.axvline(p_B_s.mean(), color="#4CAF50", linestyle="--", linewidth=1, alpha=0.6)
+        ax.axvline(
+            p_A_s.mean(), color="#2196F3", linestyle="--", linewidth=1, alpha=0.6
+        )
+        ax.axvline(
+            p_B_s.mean(), color="#4CAF50", linestyle="--", linewidth=1, alpha=0.6
+        )
         ax.set_xlabel("Success probability")
         ax.set_ylabel("Density")
         ax.set_title("Implied Probability Posteriors", fontsize=11, fontweight="bold")
@@ -570,7 +656,9 @@ class PairedBayesPropTest:
         ax.grid(alpha=0.3)
 
         fig.suptitle(
-            kwargs.pop("suptitle", kwargs.pop("title", "Laplace Posterior (Pooled Binomial)")),
+            kwargs.pop(
+                "suptitle", kwargs.pop("title", "Laplace Posterior (Pooled Binomial)")
+            ),
             fontsize=13,
             fontweight="bold",
             y=1.02,
@@ -596,7 +684,9 @@ class PairedBayesPropTest:
         ax.plot(x_grid, density, color=color, linewidth=2)
         ax.fill_between(x_grid, density, alpha=0.15, color=color)
         mask = (x_grid >= ci_low) & (x_grid <= ci_high)
-        ax.fill_between(x_grid[mask], density[mask], alpha=0.35, color=color, label="95% CI")
+        ax.fill_between(
+            x_grid[mask], density[mask], alpha=0.35, color=color, label="95% CI"
+        )
         ax.axvline(
             mean_val,
             color=color,
@@ -793,7 +883,9 @@ class PairedBayesPropTest:
         ax.axvline(0, color="gray", linestyle="--", linewidth=1, alpha=0.6)
         ax.set_xlabel("P(perfect)_A \u2212 P(perfect)_B")
         ax.set_ylabel("Density")
-        ax.set_title("PPC: Rate Difference (A \u2212 B)", fontsize=11, fontweight="bold")
+        ax.set_title(
+            "PPC: Rate Difference (A \u2212 B)", fontsize=11, fontweight="bold"
+        )
         ax.legend(fontsize=9)
         ax.grid(alpha=0.3)
 
@@ -821,15 +913,25 @@ class PairedBayesPropTest:
         # Left: P(H0|data) vs prior P(H0)
         ax = axes[0]
         prior_grid = np.linspace(0.01, 0.99, 200)
-        p_h0_grid = [self.posterior_probability_H0(bf.BF_01, p).p_H0 for p in prior_grid]
+        p_h0_grid = [
+            self.posterior_probability_H0(bf.BF_01, p).p_H0 for p in prior_grid
+        ]
         bf10 = bf.BF_10
-        bf_label = f"log\u2081\u2080BF\u2081\u2080={np.log10(bf10):.0f}" if bf10 > 1e4 else f"BF\u2081\u2080={bf10:.1f}"
+        bf_label = (
+            f"log\u2081\u2080BF\u2081\u2080={np.log10(bf10):.0f}"
+            if bf10 > 1e4
+            else f"BF\u2081\u2080={bf10:.1f}"
+        )
         ax.plot(prior_grid, p_h0_grid, linewidth=2, label=bf_label)
-        ax.axhline(0.05, color="red", linestyle="--", alpha=0.5, label="P(H\u2080)=0.05")
+        ax.axhline(
+            0.05, color="red", linestyle="--", alpha=0.5, label="P(H\u2080)=0.05"
+        )
         ax.axvline(prior_H0, color="gray", linestyle=":", alpha=0.5)
         ax.set_xlabel("Prior P(H\u2080)")
         ax.set_ylabel("Posterior P(H\u2080 | data)")
-        ax.set_title("Sensitivity: P(H\u2080 | data) vs Prior P(H\u2080)", fontweight="bold")
+        ax.set_title(
+            "Sensitivity: P(H\u2080 | data) vs Prior P(H\u2080)", fontweight="bold"
+        )
         ax.legend(fontsize=9)
         ax.grid(alpha=0.3)
         ax.set_xlim(0, 1)
@@ -842,8 +944,12 @@ class PairedBayesPropTest:
         post_at_0 = float(kde(0.0)[0])
         bf10_vals = [norm.pdf(0, 0, s) / post_at_0 for s in sigma_grid]
         ax2.plot(sigma_grid, bf10_vals, linewidth=2)
-        ax2.axhline(3, color="red", linestyle="--", alpha=0.5, label="BF\u2081\u2080 = 3")
-        ax2.axhline(1, color="gray", linestyle=":", alpha=0.5, label="BF\u2081\u2080 = 1")
+        ax2.axhline(
+            3, color="red", linestyle="--", alpha=0.5, label="BF\u2081\u2080 = 3"
+        )
+        ax2.axhline(
+            1, color="gray", linestyle=":", alpha=0.5, label="BF\u2081\u2080 = 1"
+        )
         ax2.axvline(
             self.prior_sigma_delta,
             color="gray",
@@ -883,11 +989,17 @@ class PairedBayesPropTest:
 
         # Laplace posterior info
         s = self.summary
-        verdict = "A wins" if s.p_A_greater_B > 0.95 else ("Tied" if s.p_A_greater_B > 0.5 else "B wins")
+        verdict = (
+            "A wins"
+            if s.p_A_greater_B > 0.95
+            else ("Tied" if s.p_A_greater_B > 0.5 else "B wins")
+        )
         print("Laplace posterior summary")
         print("=" * 60)
         print(f"  MAP: \u03bc={mu_map:.4f}, \u03b4_A={delta_map:.4f}")
-        print(f"  Posterior sd: \u03bc={np.sqrt(cov[0, 0]):.4f}, \u03b4_A={np.sqrt(cov[1, 1]):.4f}")
+        print(
+            f"  Posterior sd: \u03bc={np.sqrt(cov[0, 0]):.4f}, \u03b4_A={np.sqrt(cov[1, 1]):.4f}"
+        )
         print(f"  Correlation: {cov[0, 1] / np.sqrt(cov[0, 0] * cov[1, 1]):.3f}")
         print(f"  Mean \u0394 (prob scale):  {s.mean_delta:.4f}")
         print(f"  95% CI:               [{s.ci_95.lower:.4f}, {s.ci_95.upper:.4f}]")
@@ -924,7 +1036,9 @@ class PairedBayesPropTest:
         print(f"  {'Statistic':<20} {'Observed':>10} {'p-value':>10} {'Status':>8}")
         print("  " + "-" * 50)
         for stat, vals in ppc.items():
-            print(f"  {stat:<20} {vals.observed:>10.4f} {vals.p_value:>10.3f} {vals.status:>8}")
+            print(
+                f"  {stat:<20} {vals.observed:>10.4f} {vals.p_value:>10.3f} {vals.status:>8}"
+            )
 
         # Trace summary
         print()
@@ -953,20 +1067,29 @@ class PairedBayesPropTest:
         ci_highs = [results[m].summary.ci_95.upper for m in metrics]
         probs = [results[m].summary.p_A_greater_B for m in metrics]
 
-        colors = ["#2196F3" if p > 0.95 else "#FF9800" if p > 0.5 else "#F44336" for p in probs]
+        colors = [
+            "#2196F3" if p > 0.95 else "#FF9800" if p > 0.5 else "#F44336"
+            for p in probs
+        ]
         y_pos = np.arange(len(metrics))
 
         figsize = kwargs.pop("figsize", (14, max(4, 2 * len(metrics))))
         fig, axes = plt.subplots(1, 2, figsize=figsize)
 
         ax = axes[0]
-        for i, (m, ci_l, ci_h, col) in enumerate(zip(means, ci_lows, ci_highs, colors, strict=False)):
-            ax.plot([ci_l, ci_h], [i, i], color=col, linewidth=2.5, solid_capstyle="round")
+        for i, (m, ci_l, ci_h, col) in enumerate(
+            zip(means, ci_lows, ci_highs, colors, strict=False)
+        ):
+            ax.plot(
+                [ci_l, ci_h], [i, i], color=col, linewidth=2.5, solid_capstyle="round"
+            )
             ax.plot(m, i, "o", color=col, markersize=8, zorder=5)
         ax.axvline(0, color="gray", linestyle="--", linewidth=1, alpha=0.7)
         ax.set_yticks(y_pos)
         ax.set_yticklabels(metrics, fontsize=11)
-        ax.set_xlabel(f"Mean \u0394 P(perfect)\n\u2190 {label_B} better | {label_A} better \u2192")
+        ax.set_xlabel(
+            f"Mean \u0394 P(perfect)\n\u2190 {label_B} better | {label_A} better \u2192"
+        )
         ax.set_title("Posterior Mean Difference with 95% CI", fontweight="bold")
         ax.invert_yaxis()
         ax.grid(axis="x", alpha=0.3)
@@ -982,7 +1105,9 @@ class PairedBayesPropTest:
         ax2.invert_yaxis()
         ax2.grid(axis="x", alpha=0.3)
         for i, p in enumerate(probs):
-            ax2.text(p + 0.02, i, f"{p:.2f}", va="center", fontsize=10, fontweight="bold")
+            ax2.text(
+                p + 0.02, i, f"{p:.2f}", va="center", fontsize=10, fontweight="bold"
+            )
 
         legend_elements = [
             mpatches.Patch(color="#2196F3", label="Strong (P > 0.95)"),
@@ -999,7 +1124,9 @@ class PairedBayesPropTest:
         fig.suptitle(
             kwargs.pop(
                 "suptitle",
-                kwargs.pop("title", f"{label_A} vs {label_B} \u2014 Pooled Binomial Comparison"),
+                kwargs.pop(
+                    "title", f"{label_A} vs {label_B} \u2014 Pooled Binomial Comparison"
+                ),
             ),
             fontsize=14,
             fontweight="bold",
@@ -1012,14 +1139,378 @@ class PairedBayesPropTest:
     def print_comparison_table(results: dict[str, "PairedBayesPropTest"]) -> None:
         """Print a formatted comparison table across metrics."""
         print("=" * 80)
-        print(f"{'Metric':<25} {'Mean \u0394':>8} {'95% CI':>20} {'P(A>B)':>8} {'Verdict':>12}")
+        print(
+            f"{'Metric':<25} {'Mean \u0394':>8} {'95% CI':>20} {'P(A>B)':>8} {'Verdict':>12}"
+        )
         print("=" * 80)
         for m, model in results.items():
             s = model.summary
-            verdict = "A wins" if s.p_A_greater_B > 0.95 else ("Tied" if s.p_A_greater_B > 0.5 else "B wins")
+            verdict = (
+                "A wins"
+                if s.p_A_greater_B > 0.95
+                else ("Tied" if s.p_A_greater_B > 0.5 else "B wins")
+            )
             print(
                 f"{m:<25} {s.mean_delta:>8.4f} "
                 f"[{s.ci_95.lower:>7.4f}, {s.ci_95.upper:>7.4f}] "
                 f"{s.p_A_greater_B:>8.4f} {verdict:>12}"
             )
         print("=" * 80)
+
+
+# ====================================================================== #
+#  Sequential / streaming paired Laplace test
+# ====================================================================== #
+
+
+class SequentialPairedBayesPropTest:
+    """Sequential / streaming paired Bayesian A/B test (Laplace).
+
+    Maintains running cumulative sufficient statistics
+    ``(n_A, k_A, n_B, k_B)`` and re-fits the pooled Bernoulli logistic
+    model via :class:`PairedBayesPropTest` after each batch. Because the
+    likelihood depends on the data only through these four counts, the
+    refit at look ``t`` returns *exactly* the same Laplace posterior as
+    fitting all accumulated data in one shot — there is no information
+    loss from streaming.
+
+    On every :meth:`update` call the cumulative posterior is re-evaluated,
+    producing a snapshot containing the Laplace posterior state
+    ``(mu_MAP, delta_A_MAP, Sigma)``, the posterior probability
+    ``P(p_A > p_B)`` on the probability scale, the Savage-Dickey Bayes
+    factor on ``delta_A = 0`` (logit scale), the ROPE classification on
+    ``Delta = p_A - p_B``, and a sequential stopping decision.
+
+    Stopping rule: stop when the Savage-Dickey BF\u2081\u2080 exceeds
+    ``bf_upper`` (evidence for H\u2081), falls below ``bf_lower``
+    (evidence for H\u2080), or when both arms reach ``n_max`` (if set).
+    """
+
+    def __init__(
+        self,
+        prior_sigma_delta: float = 1.0,
+        bf_upper: float = 10.0,
+        bf_lower: float = 0.1,
+        n_max: int | None = None,
+        n_min: int = 0,
+        decision_rule: DecisionRuleType = "all",
+        rope_epsilon: float = 0.02,
+        seed: int = 0,
+        n_samples: int = 8000,
+        verbose: bool = False,
+    ) -> None:
+        """Initialise the sequential paired Laplace test.
+
+        Args:
+            prior_sigma_delta: Standard deviation of the N(0, sigma) prior
+                on ``delta_A`` (logit scale). Held fixed across all looks
+                so the Savage-Dickey BF is consistent.
+            bf_upper: Stop for H\u2081 when BF\u2081\u2080 \u2265 this value.
+            bf_lower: Stop for H\u2080 when BF\u2081\u2080 \u2264 this value.
+            n_max: If set, stop once min(n_A, n_B) \u2265 n_max.
+            n_min: Minimum samples per arm before any BF-based stopping
+                decision is allowed (guards against unstable early BFs).
+            decision_rule: Decision framework passed to
+                :meth:`PairedBayesPropTest.decide` at each look.
+            rope_epsilon: Half-width of the ROPE on \u0394 = p_A - p_B
+                (probability scale).
+            seed: Random seed for the Laplace posterior draws.
+            n_samples: Number of draws from the Laplace posterior per look.
+            verbose: If True, print a one-line summary per look.
+        """
+        if bf_lower >= bf_upper:
+            raise ValueError("bf_lower must be strictly less than bf_upper")
+        if bf_lower <= 0:
+            raise ValueError("bf_lower must be positive")
+
+        self.prior_sigma_delta = prior_sigma_delta
+        self.bf_upper = bf_upper
+        self.bf_lower = bf_lower
+        self.n_max = n_max
+        self.n_min = n_min
+        self.decision_rule = decision_rule
+        self.rope_epsilon = rope_epsilon
+        self.seed = seed
+        self.n_samples = n_samples
+        self.verbose = verbose
+
+        # Cumulative sufficient statistics (everything the likelihood sees).
+        self.n_A: int = 0
+        self.n_B: int = 0
+        self.successes_A: int = 0
+        self.successes_B: int = 0
+
+        self.history: list[SequentialLaplaceLookResult] = []
+        self._stopped: bool = False
+        self._stop_reason: str | None = None
+        self._last_model: PairedBayesPropTest | None = None
+
+    # ------------------------------------------------------------------ #
+    #  Public API
+    # ------------------------------------------------------------------ #
+
+    @property
+    def stopped(self) -> bool:
+        """True once a stopping rule has triggered."""
+        return self._stopped
+
+    @property
+    def stop_reason(self) -> str | None:
+        """Reason for stopping, or None if still continuing."""
+        return self._stop_reason
+
+    @property
+    def last_model(self) -> PairedBayesPropTest | None:
+        """The most recently fitted :class:`PairedBayesPropTest` (or None)."""
+        return self._last_model
+
+    def update(
+        self,
+        y_a_batch: npt.ArrayLike,
+        y_b_batch: npt.ArrayLike,
+    ) -> SequentialLaplaceLookResult:
+        """Incorporate a new paired batch and return the updated snapshot.
+
+        Args:
+            y_a_batch: New binary observations for arm A (0/1).
+            y_b_batch: New binary observations for arm B (0/1), same length
+                as ``y_a_batch`` (paired design).
+
+        Returns:
+            :class:`SequentialLaplaceLookResult` for this look, also
+            appended to :attr:`history`.
+
+        Raises:
+            RuntimeError: If called after the stopping rule has fired.
+            ValueError: If batch lengths differ or contain non-binary values.
+        """
+        if self._stopped:
+            raise RuntimeError(f"Sequential test already stopped: {self._stop_reason}")
+
+        ya = np.asarray(y_a_batch)
+        yb = np.asarray(y_b_batch)
+        if len(ya) != len(yb):
+            raise ValueError(
+                f"Paired batches must have equal length, got {len(ya)} and {len(yb)}."
+            )
+        if ya.size and not (
+            np.all((ya == 0) | (ya == 1)) and np.all((yb == 0) | (yb == 1))
+        ):
+            raise ValueError(
+                "SequentialPairedBayesPropTest expects already-binarized "
+                "0/1 inputs (binarize continuous scores beforehand)."
+            )
+
+        self.n_A += int(len(ya))
+        self.n_B += int(len(yb))
+        self.successes_A += int(ya.sum())
+        self.successes_B += int(yb.sum())
+
+        snap = self._snapshot()
+        self.history.append(snap)
+
+        if self.verbose:
+            bf10 = (
+                snap.decision.bayes_factor.BF_10
+                if snap.decision.bayes_factor
+                else float("nan")
+            )
+            print(
+                f"[look {snap.look}] n_A={snap.n_A} n_B={snap.n_B} "
+                f"P(A>B)={snap.P_A_greater_B:.3f} BF10={bf10:.3g} "
+                f"stop={snap.stop} ({snap.stop_reason})"
+            )
+
+        return snap
+
+    def run(
+        self,
+        batches: Iterable[tuple[npt.ArrayLike, npt.ArrayLike]],
+    ) -> SequentialLaplaceLookResult:
+        """Consume a stream of paired batches until stopping or exhaustion.
+
+        Args:
+            batches: Iterable yielding ``(y_a_batch, y_b_batch)`` pairs.
+
+        Returns:
+            The final :class:`SequentialLaplaceLookResult`.
+        """
+        last: SequentialLaplaceLookResult | None = None
+        for ya, yb in batches:
+            last = self.update(ya, yb)
+            if self._stopped:
+                break
+        if last is None:
+            raise ValueError("`batches` was empty; nothing to update.")
+        return last
+
+    def history_frame(self) -> pd.DataFrame:
+        """Return the per-look history as a tidy DataFrame for plotting."""
+        rows = []
+        for s in self.history:
+            bf = s.decision.bayes_factor
+            rope = s.decision.rope
+            rows.append(
+                {
+                    "look": s.look,
+                    "n_A": s.n_A,
+                    "n_B": s.n_B,
+                    "mu_MAP": s.posterior_state.mu_map,
+                    "delta_A_MAP": s.posterior_state.delta_A_map,
+                    "P_A_gt_B": s.P_A_greater_B,
+                    "BF_10": bf.BF_10 if bf else np.nan,
+                    "BF_01": bf.BF_01 if bf else np.nan,
+                    "pct_in_rope": rope.pct_in_rope if rope else np.nan,
+                    "stop": s.stop,
+                    "stop_reason": s.stop_reason,
+                }
+            )
+        return pd.DataFrame(rows)
+
+    def plot_trajectory(self, **kwargs: Any) -> None:
+        """Plot BF\u2081\u2080 and P(p_A > p_B) trajectories across looks.
+
+        Args:
+            **kwargs: Accepts ``figsize`` (default ``(12, 4)``).
+        """
+        import matplotlib.pyplot as plt
+
+        if not self.history:
+            raise RuntimeError("No history yet; call .update() first.")
+
+        df = self.history_frame()
+        figsize = kwargs.pop("figsize", (12, 4))
+        fig, axes = plt.subplots(1, 2, figsize=figsize)
+
+        ax = axes[0]
+        ax.plot(df["n_A"] + df["n_B"], df["BF_10"], marker="o", color="#E91E63")
+        ax.axhline(
+            self.bf_upper,
+            ls="--",
+            color="gray",
+            alpha=0.7,
+            label=f"BF\u2081\u2080 = {self.bf_upper}",
+        )
+        ax.axhline(
+            self.bf_lower,
+            ls="--",
+            color="gray",
+            alpha=0.7,
+            label=f"BF\u2081\u2080 = {self.bf_lower}",
+        )
+        ax.set_yscale("log")
+        ax.set_xlabel("Cumulative n_A + n_B")
+        ax.set_ylabel("BF\u2081\u2080 (log scale)")
+        ax.set_title("Sequential Bayes Factor (paired Laplace)")
+        ax.grid(alpha=0.3)
+        ax.legend(fontsize=8)
+
+        ax = axes[1]
+        ax.plot(df["n_A"] + df["n_B"], df["P_A_gt_B"], marker="o", color="#3F51B5")
+        ax.axhline(0.5, ls=":", color="gray", alpha=0.7)
+        ax.set_xlabel("Cumulative n_A + n_B")
+        ax.set_ylabel("P(p_A > p_B)")
+        ax.set_title("Posterior probability of superiority")
+        ax.set_ylim(0, 1)
+        ax.grid(alpha=0.3)
+
+        fig.tight_layout()
+        plt.show()
+
+    # ------------------------------------------------------------------ #
+    #  Internals
+    # ------------------------------------------------------------------ #
+
+    def _snapshot(self) -> SequentialLaplaceLookResult:
+        """Compute decision metrics directly from cumulative counts.
+
+        Computes the Laplace posterior of ``(mu, delta_A)`` via the
+        closed-form count-based MAP + Hessian (no raw-data array is
+        materialised), draws ``n_samples`` from the resulting 2D Gaussian,
+        and populates a :class:`PairedBayesPropTest` in a fitted state so
+        its ``decide()`` machinery can be reused unchanged.
+        """
+        # Closed-form Laplace from sufficient statistics — O(1) per look.
+        x0 = (
+            (self._last_model.laplace["map"][0], self._last_model.laplace["map"][1])
+            if self._last_model is not None and self._last_model.laplace is not None
+            else (0.0, 0.0)
+        )
+        theta_map, cov, H = _paired_laplace_from_counts(
+            n_A=self.n_A,
+            k_A=self.successes_A,
+            n_B=self.n_B,
+            k_B=self.successes_B,
+            prior_sigma_delta=self.prior_sigma_delta,
+            x0=x0,
+        )
+        mu_map, delta_map = float(theta_map[0]), float(theta_map[1])
+
+        # Draw posterior samples from the Laplace Gaussian.
+        rng = np.random.default_rng(self.seed)
+        samples = rng.multivariate_normal(theta_map, cov, size=self.n_samples)
+        mu_s = samples[:, 0]
+        delta_A_s = samples[:, 1]
+        p_A_s = 1.0 / (1.0 + np.exp(-(mu_s + delta_A_s)))
+        p_B_s = 1.0 / (1.0 + np.exp(-mu_s))
+        delta_s = p_A_s - p_B_s
+
+        # Populate a PairedBayesPropTest in a fitted state without calling
+        # .fit() — we already have the Laplace solution.
+        model = PairedBayesPropTest(
+            prior_sigma_delta=self.prior_sigma_delta,
+            seed=self.seed,
+            n_samples=self.n_samples,
+            decision_rule=self.decision_rule,
+            rope_epsilon=self.rope_epsilon,
+        )
+        model.laplace = {
+            "map": theta_map,
+            "cov": cov,
+            "H": H,
+            "mu_samples": mu_s,
+            "delta_A_samples": delta_A_s,
+            "n_A": self.n_A,
+            "k_A": self.successes_A,
+            "n_B": self.n_B,
+            "k_B": self.successes_B,
+            "prior_sigma_delta": self.prior_sigma_delta,
+        }
+        model.delta_A_samples = delta_A_s
+        model.delta_samples = delta_s
+        self._last_model = model
+
+        decision = model.decide()
+        p_a_gt_b = float((delta_s > 0).mean())
+
+        # Stopping rule.
+        bf10 = decision.bayes_factor.BF_10 if decision.bayes_factor else None
+        n_min_pair = min(self.n_A, self.n_B)
+        stop, reason = False, None
+        if self.n_max is not None and n_min_pair >= self.n_max:
+            stop, reason = True, "n_max reached"
+        elif bf10 is not None and n_min_pair >= self.n_min:
+            if bf10 >= self.bf_upper:
+                stop, reason = True, f"BF10 \u2265 {self.bf_upper} (evidence for H1)"
+            elif bf10 <= self.bf_lower:
+                stop, reason = True, f"BF10 \u2264 {self.bf_lower} (evidence for H0)"
+        if stop:
+            self._stopped = True
+            self._stop_reason = reason
+
+        return SequentialLaplaceLookResult(
+            look=len(self.history) + 1,
+            n_A=self.n_A,
+            n_B=self.n_B,
+            successes_A=self.successes_A,
+            successes_B=self.successes_B,
+            posterior_state=SequentialLaplaceState(
+                mu_map=mu_map,
+                delta_A_map=delta_map,
+                cov=cov.tolist(),
+            ),
+            P_A_greater_B=p_a_gt_b,
+            decision=decision,
+            stop=stop,
+            stop_reason=reason,
+        )

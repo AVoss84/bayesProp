@@ -451,3 +451,54 @@ class SequentialLookResult(BaseModel):
     stop_reason: str | None = Field(
         default=None, description="Reason for stopping (None if continuing)."
     )
+
+
+# ====================================================================== #
+#  Sequential design — paired Laplace model
+# ====================================================================== #
+
+
+class SequentialLaplaceState(BaseModel):
+    """Running Laplace posterior state for the sequential paired model.
+
+    Carries the MAP estimate and 2x2 covariance of (mu, delta_A) on the
+    logit scale, recomputed from cumulative sufficient statistics at
+    every look.
+    """
+
+    mu_map: float = Field(..., description="MAP estimate of mu (logit scale).")
+    delta_A_map: float = Field(
+        ..., description="MAP estimate of delta_A (logit scale)."
+    )
+    cov: list[list[float]] = Field(
+        ...,
+        description="2x2 Laplace covariance matrix for (mu, delta_A).",
+    )
+
+
+class SequentialLaplaceLookResult(BaseModel):
+    """Snapshot of the sequential paired Laplace test after a single look."""
+
+    look: int = Field(..., ge=1, description="1-based index of this look.")
+    n_A: int = Field(..., ge=0, description="Cumulative sample size for arm A.")
+    n_B: int = Field(..., ge=0, description="Cumulative sample size for arm B.")
+    successes_A: int = Field(..., ge=0, description="Cumulative successes for arm A.")
+    successes_B: int = Field(..., ge=0, description="Cumulative successes for arm B.")
+    posterior_state: SequentialLaplaceState = Field(
+        ..., description="Running Laplace posterior state after this look."
+    )
+    P_A_greater_B: float = Field(
+        ...,
+        ge=0,
+        le=1,
+        description="Posterior probability P(p_A > p_B) on the probability scale.",
+    )
+    decision: HypothesisDecision = Field(
+        ..., description="Composite decision result at this look."
+    )
+    stop: bool = Field(
+        ..., description="Whether a sequential stopping rule has triggered."
+    )
+    stop_reason: str | None = Field(
+        default=None, description="Reason for stopping (None if continuing)."
+    )
