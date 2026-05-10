@@ -27,7 +27,7 @@ Please check out our [Getting Started](https://avoss84.github.io/bayesProp/getti
 
 | Model | Class | Method | When to use |
 |---|---|---|---|
-| **Non-paired Beta–Bernoulli** | `NonPairedBayesPropTest` | Conjugate Beta posterior | Independent groups, exact & fast |
+| **Non-paired Beta–Bernoulli** | `NonPairedBayesPropTest` | Conjugate Beta posteriors per arm; P(B>A) by quadrature, Δ summaries by Monte Carlo | Independent groups, exact & fast |
 | **Paired Logistic (Laplace)** | `PairedBayesPropTest` | MAP + Laplace approximation | Paired scores, large *n*, fast iteration |
 | **Paired Logistic (Pólya–Gamma)** | `PairedBayesPropTestPG` | Exact Gibbs sampling | Paired scores, small *n*, exact posterior |
 
