@@ -70,7 +70,7 @@ model.plot_savage_dickey()
 │   │   │   ├── bfda_utils.py           # BFDA helpers
 │   │   │   └── data_schemas.py         # Pydantic models
 │   │   ├── services/
-│   │   │   └── file.py                 # CSV / JSON / YAML / XLSX I/O
+│   │   │   └── file.py                 
 │   │   └── utils/
 │   │       └── utils.py                # simulate, BFDA power curves, plots
 │   └── notebooks/
