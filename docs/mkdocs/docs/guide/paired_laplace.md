@@ -55,17 +55,19 @@ The Laplace method approximates the posterior as a bivariate Gaussian centred
 at the MAP (maximum a posteriori) estimate:
 
 $$
-p(\mu, \delta_A \mid y) \;\approx\; \mathcal{N}\!\bigl(\hat{\theta}_{\text{MAP}},\; \mathbf{H}^{-1}\bigr)
+p(\mathbf{\theta} \mid y) \;\approx\; \mathcal{N}\!\bigl(\hat{\mathbf{\theta}}_{\text{MAP}},\; \mathbf{H}^{-1}\bigr)
 $$
 
 where $\mathbf{H}$ is the Hessian of the negative log-posterior evaluated at the MAP.
 
 ### Log-posterior
 
+Let $\mathbf{\theta} = (\mu, \delta_A)^\top$ denote the parameter vector. The log-posterior is
+
 $$
-\log p(\mu, \delta \mid y) = \sum_i \bigl[y_{A,i} \log p_A + (1 - y_{A,i}) \log(1 - p_A)\bigr]
+\log p(\mathbf{\theta} \mid y) = \sum_i \bigl[y_{A,i} \log p_A + (1 - y_{A,i}) \log(1 - p_A)\bigr]
 + \sum_i \bigl[y_{B,i} \log p_B + (1 - y_{B,i}) \log(1 - p_B)\bigr]
-- \frac{\mu^2}{2\sigma_\mu^2} - \frac{\delta^2}{2\sigma_\delta^2}
+- \frac{\mu^2}{2\sigma_\mu^2} - \frac{\delta_A^2}{2\sigma_\delta^2}
 $$
 
 with $p_A = \sigma(\mu + \delta_A)$ and $p_B = \sigma(\mu)$.
@@ -73,11 +75,11 @@ with $p_A = \sigma(\mu + \delta_A)$ and $p_B = \sigma(\mu)$.
 ### Gradient
 
 $$
-\frac{\partial}{\partial \mu} = (k_A - n \cdot p_A) + (k_B - n \cdot p_B) - \frac{\mu}{\sigma_\mu^2}
+\frac{\partial \log p(\mathbf{\theta} \mid y)}{\partial \mu} = (k_A - n \cdot p_A) + (k_B - n \cdot p_B) - \frac{\mu}{\sigma_\mu^2}
 $$
 
 $$
-\frac{\partial}{\partial \delta_A} = (k_A - n \cdot p_A) - \frac{\delta_A}{\sigma_\delta^2}
+\frac{\partial \log p(\mathbf{\theta} \mid y)}{\partial \delta_A} = (k_A - n \cdot p_A) - \frac{\delta_A}{\sigma_\delta^2}
 $$
 
 where $k_A = \sum y_{A,i}$ and $k_B = \sum y_{B,i}$.
