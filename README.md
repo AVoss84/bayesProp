@@ -34,12 +34,11 @@ Please check out our [Getting Started](https://avoss84.github.io/bayesProp/getti
 ## Quick start
 
 ```python
+import numpy as np
 from bayesprop.resources.bayes_nonpaired import NonPairedBayesPropTest
-from bayesprop.utils.utils import simulate_nonpaired_scores
 
-# Simulate independent binary data
-sim = simulate_nonpaired_scores(N=200, theta_A=0.75, theta_B=0.60, seed=42)
-y_A, y_B = sim.y_A, sim.y_B
+y_A = np.array([1,1,0,1,1,0,1,1,0,1,1,1,0,1,1,0,1,1,1,0])
+y_B = np.array([0,1,0,0,1,1,0,1,0,0,1,0,0,1,0,1,0,1,0,0])
 
 # Fit & summarise
 model = NonPairedBayesPropTest(seed=42).fit(y_A, y_B)
