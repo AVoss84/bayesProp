@@ -12,6 +12,7 @@ Typical applications include comparing treatments, groups, items, model variants
 - **Posterior of the null & ROPE** — quantify the posterior mass inside a Region of Practical Equivalence for nuanced decisions beyond simple reject/accept
 - **Posterior predictive checks** — assess model fit by comparing observed data to data simulated from the posterior
 - **Bayes Factor Design Analysis (BFDA)** — plan sample sizes to reach a target level of evidence *before* running the experiment
+- **Sequential design and decision making** — warm-started, batch-by-batch updates with optional early stopping based on Bayes factor or ROPE thresholds (see `SequentialNonPairedBayesPropTest` and `SequentialPairedBayesPropTest`)
 - **Publication-ready plots** — posterior distributions, predictive checks, Savage–Dickey density-ratio plots, and BFDA power curves out of the box
 
 ## Quick example
