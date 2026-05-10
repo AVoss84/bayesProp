@@ -11,6 +11,7 @@ matplotlib.use("Agg")
 
 from bayesprop.resources.bayes_nonpaired import (
     NonPairedBayesPropTest,
+    SequentialNonPairedBayesPropTest,
     _format_bf,
     beta_diff_pdf,
     descriptive_summary,
@@ -23,6 +24,8 @@ from bayesprop.resources.data_schemas import (
     PPCStatistic,
     ROPEResult,
     SavageDickeyResult,
+    SequentialLookResult,
+    SequentialPosteriorState,
 )
 
 # ── Fixtures ──────────────────────────────────────────────────
@@ -101,7 +104,9 @@ class TestNonPairedInit:
         assert model.n_samples == 20_000
 
     def test_custom_params(self) -> None:
-        model = NonPairedBayesPropTest(alpha0=0.5, beta0=0.5, threshold=0.8, n_samples=5000)
+        model = NonPairedBayesPropTest(
+            alpha0=0.5, beta0=0.5, threshold=0.8, n_samples=5000
+        )
         assert model.alpha0 == 0.5
         assert model.threshold == 0.8
         assert model.n_samples == 5000
@@ -120,13 +125,17 @@ class TestNonPairedInit:
 class TestNonPairedTest:
     """Tests for NonPairedBayesPropTest.test()."""
 
-    def test_returns_nonpaired_test_result(self, binary_data: tuple[np.ndarray, np.ndarray]) -> None:
+    def test_returns_nonpaired_test_result(
+        self, binary_data: tuple[np.ndarray, np.ndarray]
+    ) -> None:
         y_a, y_b = binary_data
         model = NonPairedBayesPropTest(seed=42)
         result = model.test(y_a, y_b)
         assert isinstance(result, NonPairedTestResult)
 
-    def test_posterior_params_correct(self, binary_data: tuple[np.ndarray, np.ndarray]) -> None:
+    def test_posterior_params_correct(
+        self, binary_data: tuple[np.ndarray, np.ndarray]
+    ) -> None:
         y_a, y_b = binary_data
         model = NonPairedBayesPropTest(alpha0=1.0, beta0=1.0, seed=42)
         result = model.test(y_a, y_b)
@@ -135,7 +144,9 @@ class TestNonPairedTest:
         assert result.thetaA_post.alpha == 1.0 + k_a
         assert result.thetaA_post.beta == 1.0 + n_a - k_a
 
-    def test_p_b_greater_a_in_range(self, binary_data: tuple[np.ndarray, np.ndarray]) -> None:
+    def test_p_b_greater_a_in_range(
+        self, binary_data: tuple[np.ndarray, np.ndarray]
+    ) -> None:
         y_a, y_b = binary_data
         result = NonPairedBayesPropTest(seed=42).test(y_a, y_b)
         assert 0.0 <= result.P_B_greater_A <= 1.0
@@ -154,19 +165,25 @@ class TestNonPairedFit:
         """Non-binary inputs should be binarized at threshold."""
         scores_a = np.array([0.9, 0.8, 0.3, 0.6, 0.75])
         scores_b = np.array([0.4, 0.7, 0.2, 0.5, 0.85])
-        model = NonPairedBayesPropTest(threshold=0.7, seed=42, n_samples=1000).fit(scores_a, scores_b)
+        model = NonPairedBayesPropTest(threshold=0.7, seed=42, n_samples=1000).fit(
+            scores_a, scores_b
+        )
         assert model.summary is not None
 
     def test_binarize_verbose(self, capsys: pytest.CaptureFixture[str]) -> None:
         """verbose=True should log when binarizing."""
         scores = np.array([0.9, 0.3, 0.7, 0.5])
         binary = np.array([1.0, 0.0, 1.0, 0.0])
-        model = NonPairedBayesPropTest(threshold=0.7, seed=42, n_samples=1000, verbose=True)
+        model = NonPairedBayesPropTest(
+            threshold=0.7, seed=42, n_samples=1000, verbose=True
+        )
         model.fit(scores, binary)
         captured = capsys.readouterr()
         assert "binarizing" in captured.out.lower()
 
-    def test_summary_is_nonpaired_summary(self, fitted_model: NonPairedBayesPropTest) -> None:
+    def test_summary_is_nonpaired_summary(
+        self, fitted_model: NonPairedBayesPropTest
+    ) -> None:
         assert isinstance(fitted_model.summary, NonPairedSummary)
 
     def test_summary_fields(self, fitted_model: NonPairedBayesPropTest) -> None:
@@ -178,7 +195,9 @@ class TestNonPairedFit:
     def test_delta_samples_shape(self, fitted_model: NonPairedBayesPropTest) -> None:
         assert fitted_model.delta_samples.shape == (10_000,)
 
-    def test_trace_summary_is_dataframe(self, fitted_model: NonPairedBayesPropTest) -> None:
+    def test_trace_summary_is_dataframe(
+        self, fitted_model: NonPairedBayesPropTest
+    ) -> None:
         assert isinstance(fitted_model.trace_summary, pd.DataFrame)
         assert len(fitted_model.trace_summary) > 0
 
@@ -193,7 +212,9 @@ class TestNonPairedFit:
 class TestNonPairedSavageDickey:
     """Tests for NonPairedBayesPropTest.savage_dickey_test()."""
 
-    def test_returns_savage_dickey_result(self, fitted_model: NonPairedBayesPropTest) -> None:
+    def test_returns_savage_dickey_result(
+        self, fitted_model: NonPairedBayesPropTest
+    ) -> None:
         result = fitted_model.savage_dickey_test()
         assert isinstance(result, SavageDickeyResult)
 
@@ -255,7 +276,9 @@ class TestNonPairedPosteriorProbH0:
 class TestNonPairedPPC:
     """Tests for NonPairedBayesPropTest.ppc_pvalues()."""
 
-    def test_returns_dict_of_ppc_statistics(self, fitted_model: NonPairedBayesPropTest) -> None:
+    def test_returns_dict_of_ppc_statistics(
+        self, fitted_model: NonPairedBayesPropTest
+    ) -> None:
         ppc = fitted_model.ppc_pvalues(seed=42)
         assert isinstance(ppc, dict)
         for stat_name, stat in ppc.items():
@@ -294,7 +317,9 @@ class TestNonPairedPlots:
 
         plt.close("all")
 
-    def test_print_summary(self, fitted_model: NonPairedBayesPropTest, capsys: pytest.CaptureFixture[str]) -> None:
+    def test_print_summary(
+        self, fitted_model: NonPairedBayesPropTest, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         fitted_model.print_summary()
         captured = capsys.readouterr()
         assert "P(A > B)" in captured.out
@@ -357,7 +382,9 @@ class TestNonPairedRopeTest:
 class TestNonPairedDecide:
     """Tests for NonPairedBayesPropTest.decide method."""
 
-    def test_returns_hypothesis_decision(self, fitted_model: NonPairedBayesPropTest) -> None:
+    def test_returns_hypothesis_decision(
+        self, fitted_model: NonPairedBayesPropTest
+    ) -> None:
         d = fitted_model.decide()
         assert isinstance(d, HypothesisDecision)
 
@@ -380,7 +407,9 @@ class TestNonPairedDecide:
         assert d.bayes_factor is None
         assert d.posterior_null is None
 
-    def test_posterior_null_includes_bf(self, fitted_model: NonPairedBayesPropTest) -> None:
+    def test_posterior_null_includes_bf(
+        self, fitted_model: NonPairedBayesPropTest
+    ) -> None:
         """posterior_null rule needs BF internally, so BF should be populated."""
         d = fitted_model.decide(rule="posterior_null")
         assert d.bayes_factor is not None
@@ -438,9 +467,9 @@ class TestNonPairedDGPRecovery:
 
         true_delta = theta_A - theta_B
         ci = model.summary.ci_95
-        assert ci.lower <= true_delta <= ci.upper, (
-            f"True Δ={true_delta:.3f} not in 95% CI [{ci.lower:.3f}, {ci.upper:.3f}]"
-        )
+        assert (
+            ci.lower <= true_delta <= ci.upper
+        ), f"True Δ={true_delta:.3f} not in 95% CI [{ci.lower:.3f}, {ci.upper:.3f}]"
 
     def test_theta_posteriors_cover_truth(self) -> None:
         """Individual θ_A and θ_B posterior means should be close to truth."""
@@ -477,8 +506,197 @@ class TestNonPairedDGPRecovery:
         from bayesprop.utils.utils import simulate_nonpaired_scores
 
         theta_A, theta_B = 0.75, 0.60
-        sim = simulate_nonpaired_scores(N=300, theta_A=theta_A, theta_B=theta_B, seed=99)
+        sim = simulate_nonpaired_scores(
+            N=300, theta_A=theta_A, theta_B=theta_B, seed=99
+        )
         model = NonPairedBayesPropTest(seed=99, n_samples=50_000).fit(sim.y_A, sim.y_B)
 
         true_delta = theta_A - theta_B
         assert abs(model.summary.mean_delta - true_delta) < 0.08
+
+
+# ── SequentialNonPairedBayesPropTest ──────────────────────────
+
+
+class TestSequentialNonPaired:
+    """Tests for SequentialNonPairedBayesPropTest."""
+
+    def test_initial_posterior_state_equals_prior(self) -> None:
+        seq = SequentialNonPairedBayesPropTest(alpha0=2.0, beta0=3.0)
+        assert seq.posterior_state == {
+            "alpha_A": 2.0,
+            "beta_A": 3.0,
+            "alpha_B": 2.0,
+            "beta_B": 3.0,
+        }
+        assert seq.history == []
+        assert not seq.stopped
+
+    def test_invalid_thresholds_rejected(self) -> None:
+        with pytest.raises(ValueError):
+            SequentialNonPairedBayesPropTest(bf_upper=5.0, bf_lower=10.0)
+        with pytest.raises(ValueError):
+            SequentialNonPairedBayesPropTest(bf_lower=0.0)
+
+    def test_conjugate_update_matches_batch_fit(self) -> None:
+        """Sequential updates must reproduce a single batch fit exactly."""
+        rng = np.random.default_rng(0)
+        ya = rng.binomial(1, 0.7, size=60).astype(float)
+        yb = rng.binomial(1, 0.5, size=60).astype(float)
+
+        seq = SequentialNonPairedBayesPropTest(
+            alpha0=1.0,
+            beta0=1.0,
+            n_max=10**6,
+            seed=0,
+            n_samples=5_000,
+        )
+        # feed in three batches
+        for chunk in range(3):
+            sl = slice(chunk * 20, (chunk + 1) * 20)
+            seq.update(ya[sl], yb[sl])
+
+        ps = seq.posterior_state
+        # Equivalent single-shot fit
+        bb = NonPairedBayesPropTest(seed=0, n_samples=5_000).fit(ya, yb)
+
+        assert ps["alpha_A"] == pytest.approx(bb.a_A)
+        assert ps["beta_A"] == pytest.approx(bb.b_A)
+        assert ps["alpha_B"] == pytest.approx(bb.a_B)
+        assert ps["beta_B"] == pytest.approx(bb.b_B)
+
+        # P(B>A) should match (analytic, no MC noise)
+        assert seq.history[-1].P_B_greater_A == pytest.approx(
+            bb.p_B_greater_A, rel=1e-9
+        )
+
+    def test_snapshot_types(self) -> None:
+        rng = np.random.default_rng(1)
+        ya = rng.binomial(1, 0.6, size=50).astype(float)
+        yb = rng.binomial(1, 0.5, size=50).astype(float)
+
+        seq = SequentialNonPairedBayesPropTest(seed=1, n_samples=3_000)
+        snap = seq.update(ya, yb)
+
+        assert isinstance(snap, SequentialLookResult)
+        assert isinstance(snap.posterior_state, SequentialPosteriorState)
+        assert isinstance(snap.decision, HypothesisDecision)
+        assert snap.decision.bayes_factor is not None
+        assert snap.decision.rope is not None
+        assert snap.look == 1
+        assert snap.n_A == 50 and snap.n_B == 50
+
+    def test_stopping_on_bf_upper(self) -> None:
+        """A clear effect should trigger BF10 ≥ bf_upper stop."""
+        rng = np.random.default_rng(7)
+        # generate a sizeable stream with strong effect
+        batches = [
+            (
+                rng.binomial(1, 0.85, size=50).astype(float),
+                rng.binomial(1, 0.40, size=50).astype(float),
+            )
+            for _ in range(10)
+        ]
+        seq = SequentialNonPairedBayesPropTest(
+            bf_upper=10.0,
+            bf_lower=0.1,
+            n_min=20,
+            seed=7,
+            n_samples=5_000,
+        )
+        final = seq.run(batches)
+        assert seq.stopped
+        assert "H1" in seq.stop_reason
+        assert final.decision.bayes_factor.BF_10 >= 10.0
+
+    def test_stopping_on_n_max(self) -> None:
+        rng = np.random.default_rng(2)
+        # tiny effect → BF won't trigger; n_max should
+        batches = [
+            (
+                rng.binomial(1, 0.50, size=10).astype(float),
+                rng.binomial(1, 0.50, size=10).astype(float),
+            )
+            for _ in range(20)
+        ]
+        seq = SequentialNonPairedBayesPropTest(
+            bf_upper=1e9,
+            bf_lower=1e-9,
+            n_max=50,
+            seed=2,
+            n_samples=2_000,
+        )
+        final = seq.run(batches)
+        assert seq.stopped
+        assert seq.stop_reason == "n_max reached"
+        assert final.n_A >= 50 and final.n_B >= 50
+
+    def test_update_after_stop_raises(self) -> None:
+        rng = np.random.default_rng(3)
+        ya = rng.binomial(1, 0.9, size=200).astype(float)
+        yb = rng.binomial(1, 0.3, size=200).astype(float)
+        seq = SequentialNonPairedBayesPropTest(
+            bf_upper=3.0,
+            n_min=10,
+            seed=3,
+            n_samples=2_000,
+        )
+        seq.update(ya, yb)  # huge effect → stops immediately
+        assert seq.stopped
+        with pytest.raises(RuntimeError):
+            seq.update(ya[:5], yb[:5])
+
+    def test_run_empty_batches_raises(self) -> None:
+        seq = SequentialNonPairedBayesPropTest()
+        with pytest.raises(ValueError):
+            seq.run(iter([]))
+
+    def test_history_frame_shape(self) -> None:
+        rng = np.random.default_rng(4)
+        seq = SequentialNonPairedBayesPropTest(
+            bf_upper=1e9,
+            bf_lower=1e-9,
+            seed=4,
+            n_samples=2_000,
+        )
+        for _ in range(3):
+            seq.update(
+                rng.binomial(1, 0.6, size=20).astype(float),
+                rng.binomial(1, 0.5, size=20).astype(float),
+            )
+        df = seq.history_frame()
+        assert len(df) == 3
+        assert {"look", "n_A", "n_B", "BF_10", "P_B_gt_A", "stop"}.issubset(df.columns)
+        assert list(df["look"]) == [1, 2, 3]
+
+    def test_continuous_scores_are_binarized(self) -> None:
+        rng = np.random.default_rng(5)
+        ya = rng.uniform(0, 1, size=40)  # continuous
+        yb = rng.uniform(0, 1, size=40)
+        seq = SequentialNonPairedBayesPropTest(
+            threshold=0.5,
+            seed=5,
+            n_samples=2_000,
+        )
+        snap = seq.update(ya, yb)
+        # successes_A must equal count of ya >= 0.5
+        assert snap.successes_A == int((ya >= 0.5).sum())
+        assert snap.successes_B == int((yb >= 0.5).sum())
+
+    def test_plot_trajectory_smoke(self) -> None:
+        import matplotlib.pyplot as plt
+
+        rng = np.random.default_rng(6)
+        seq = SequentialNonPairedBayesPropTest(
+            bf_upper=1e9,
+            bf_lower=1e-9,
+            seed=6,
+            n_samples=2_000,
+        )
+        for _ in range(3):
+            seq.update(
+                rng.binomial(1, 0.7, size=30).astype(float),
+                rng.binomial(1, 0.5, size=30).astype(float),
+            )
+        seq.plot_trajectory()
+        plt.close("all")

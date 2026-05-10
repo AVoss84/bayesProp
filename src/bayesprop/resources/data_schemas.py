@@ -409,3 +409,45 @@ class HypothesisDecision(BaseModel):
     rule: DecisionRuleType = Field(
         default="all", description="Which decision rule was applied."
     )
+
+
+# ====================================================================== #
+#  Sequential / streaming design
+# ====================================================================== #
+
+
+class SequentialPosteriorState(BaseModel):
+    """Running Beta posterior state for a sequential non-paired test.
+
+    By Beta-Bernoulli conjugacy this *is* the prior for the next batch.
+    """
+
+    alpha_A: float = Field(..., description="Posterior alpha for arm A.")
+    beta_A: float = Field(..., description="Posterior beta for arm A.")
+    alpha_B: float = Field(..., description="Posterior alpha for arm B.")
+    beta_B: float = Field(..., description="Posterior beta for arm B.")
+
+
+class SequentialLookResult(BaseModel):
+    """Snapshot of the sequential test after a single look (batch update)."""
+
+    look: int = Field(..., ge=1, description="1-based index of this look.")
+    n_A: int = Field(..., ge=0, description="Cumulative sample size for arm A.")
+    n_B: int = Field(..., ge=0, description="Cumulative sample size for arm B.")
+    successes_A: int = Field(..., ge=0, description="Cumulative successes for arm A.")
+    successes_B: int = Field(..., ge=0, description="Cumulative successes for arm B.")
+    posterior_state: SequentialPosteriorState = Field(
+        ..., description="Running Beta posterior state after this look."
+    )
+    P_B_greater_A: float = Field(
+        ..., ge=0, le=1, description="Posterior probability P(theta_B > theta_A)."
+    )
+    decision: HypothesisDecision = Field(
+        ..., description="Composite decision result at this look."
+    )
+    stop: bool = Field(
+        ..., description="Whether a sequential stopping rule has triggered."
+    )
+    stop_reason: str | None = Field(
+        default=None, description="Reason for stopping (None if continuing)."
+    )

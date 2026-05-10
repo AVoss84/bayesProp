@@ -502,6 +502,137 @@ plot_bfda_power(power_curve, theta_A_hat, theta_B_hat)
 
 ![BFDA sensitivity to BF thresholds](../images/non-paired/bfda_sensitivity_thresholds.png)
 
+## Sequential design and decision making
+
+In a **sequential** A/B test the data arrive in batches over time and we
+update the posterior after each look. Because the Beta–Bernoulli model is
+conjugate, the running posterior
+
+$$
+\theta_A \mid \text{data}^{(t)} \sim \text{Beta}(\alpha_A^{(t)}, \beta_A^{(t)}),
+\qquad
+\theta_B \mid \text{data}^{(t)} \sim \text{Beta}(\alpha_B^{(t)}, \beta_B^{(t)})
+$$
+
+acts as the prior for the next batch. Four sufficient statistics per arm
+therefore carry **all** the information needed to recompute the
+Savage–Dickey Bayes factor on $\Delta = \theta_A - \theta_B$, the posterior
+probability $P(\theta_B > \theta_A)$, and a ROPE decision at every look.
+
+### Stopping rule
+
+At each look $t$ the test evaluates the running $\text{BF}_{10}^{(t)}$ and
+stops as soon as one of the following holds:
+
+- $\text{BF}_{10}^{(t)} \ge B_U$ (`bf_upper`) → stop for $H_1$ (evidence of a difference).
+- $\text{BF}_{10}^{(t)} \le B_L$ (`bf_lower`) → stop for $H_0$ (evidence of practical equivalence).
+- $\min(n_A^{(t)}, n_B^{(t)}) \ge n_{\max}$ → stop because the budget is exhausted.
+
+A minimum sample size $n_{\min}$ per arm (`n_min`) is enforced before any BF-based
+stop is allowed, which avoids unstable early Bayes factors. Because the
+posterior is exact and conjugate, performing many looks does **not** inflate
+a frequentist Type-I rate the way repeated $p$-values would: the BF is a
+coherent likelihood ratio whose interpretation is invariant to the stopping
+rule (optional stopping is permitted).
+
+### Example: streaming Bernoulli batches
+
+Ground truth $\theta_A = 0.75$, $\theta_B = 0.55$ ($\Delta = 0.20$ in favour
+of A). Each look delivers a batch of 25 Bernoulli observations per arm.
+
+```python
+import numpy as np
+from bayesprop.resources.bayes_nonpaired import SequentialNonPairedBayesPropTest
+
+rng = np.random.default_rng(42)
+theta_A_true, theta_B_true = 0.75, 0.55
+batch_size = 25
+n_batches_max = 40
+
+def stream():
+    """Yield (y_a_batch, y_b_batch) pairs of binary observations."""
+    for _ in range(n_batches_max):
+        y_a = rng.binomial(1, theta_A_true, size=batch_size).astype(float)
+        y_b = rng.binomial(1, theta_B_true, size=batch_size).astype(float)
+        yield y_a, y_b
+
+seq = SequentialNonPairedBayesPropTest(
+    alpha0=1.0,
+    beta0=1.0,
+    bf_upper=10.0,
+    bf_lower=0.1,
+    n_min=30,
+    n_max=1000,
+    rope_epsilon=0.02,
+    seed=0,
+    n_samples=10_000,
+    verbose=True,
+)
+
+final = seq.run(stream())
+
+print("Stopped:", seq.stopped)
+print("Reason :", seq.stop_reason)
+print("Looks  :", len(seq.history))
+print("Final n per arm:", final.n_A, final.n_B)
+```
+
+Typical output:
+
+```text
+[look 1] n_A=25  n_B=25  P(B>A)=0.800 BF10=0.478 stop=False
+[look 2] n_A=50  n_B=50  P(B>A)=0.338 BF10=0.254 stop=False
+[look 3] n_A=75  n_B=75  P(B>A)=0.244 BF10=0.240 stop=False
+[look 4] n_A=100 n_B=100 P(B>A)=0.118 BF10=0.336 stop=False
+[look 5] n_A=125 n_B=125 P(B>A)=0.017 BF10=1.43  stop=False
+[look 6] n_A=150 n_B=150 P(B>A)=0.003 BF10=6.99  stop=False
+[look 7] n_A=175 n_B=175 P(B>A)=0.000 BF10=187   stop=True   (BF10 ≥ 10.0)
+
+Stopped: True
+Reason : BF10 ≥ 10.0 (evidence for H1)
+Looks  : 7
+Final n per arm: 175 175
+```
+
+### Inspect the final snapshot and history
+
+The last `SequentialLookResult` exposes the same diagnostics as the batch
+test (posterior state, $P(\theta_B > \theta_A)$, Savage–Dickey BF, ROPE),
+and `history_frame()` returns one row per look:
+
+```python
+ps = final.posterior_state
+print(f"theta_A | data ~ Beta({ps.alpha_A:.0f}, {ps.beta_A:.0f})")
+print(f"theta_B | data ~ Beta({ps.alpha_B:.0f}, {ps.beta_B:.0f})")
+print(f"P(theta_B > theta_A) = {final.P_B_greater_A:.4f}")
+print(f"BF10 = {final.decision.bayes_factor.BF_10:.3g}")
+print(f"ROPE decision: {final.decision.rope.decision}")
+
+df = seq.history_frame()       # per-look DataFrame
+seq.plot_trajectory()           # BF10 and P(B>A) vs cumulative n
+```
+
+### Equivalence to a single-shot fit
+
+Because of conjugacy, fitting all accumulated data in one shot must yield
+**exactly** the same posterior as the sequential update — a useful sanity
+check:
+
+```python
+from bayesprop.resources.bayes_nonpaired import NonPairedBayesPropTest
+
+y_a_all = np.r_[np.ones(final.successes_A), np.zeros(final.n_A - final.successes_A)]
+y_b_all = np.r_[np.ones(final.successes_B), np.zeros(final.n_B - final.successes_B)]
+
+bb_batch = NonPairedBayesPropTest(alpha0=1.0, beta0=1.0, seed=0, n_samples=10_000).fit(
+    y_a_all, y_b_all
+)
+# bb_batch.a_A, bb_batch.b_A, ... match seq.posterior_state exactly.
+```
+
+See the runnable notebook at
+`src/notebooks/sequential_nonpaired_demo.ipynb` for the full demo.
+
 ## API
 
 See [API Reference — Non-Paired Model](../api/bayes_nonpaired.md) for full method documentation.

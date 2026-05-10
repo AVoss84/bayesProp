@@ -20,7 +20,7 @@ Typical workflow::
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Iterable
 
 import numpy as np
 import numpy.typing as npt
@@ -39,6 +39,8 @@ from bayesprop.resources.data_schemas import (
     PPCStatistic,
     ROPEResult,
     SavageDickeyResult,
+    SequentialLookResult,
+    SequentialPosteriorState,
 )
 
 
@@ -1016,6 +1018,344 @@ class NonPairedBayesPropTest:
                 f"{s.p_A_greater_B:>8.4f} {verdict:>12}"
             )
         print("=" * 80)
+
+
+# ====================================================================== #
+#  Sequential / streaming non-paired test
+# ====================================================================== #
+
+
+class SequentialNonPairedBayesPropTest:
+    """Sequential / streaming non-paired Bayesian A/B test.
+
+    Maintains a running Beta posterior per arm and updates it as new
+    batches of observations arrive. Because the Beta-Bernoulli model is
+    conjugate, the current posterior is also the prior for the next
+    batch — so the running posterior parameters are sufficient state.
+
+    On every :meth:`update` call the cumulative posterior is re-evaluated
+    via :class:`NonPairedBayesPropTest`, producing a snapshot containing
+    the posterior state, P(theta_B > theta_A), Savage-Dickey Bayes
+    factor, posterior probability of H₀, ROPE analysis, and a
+    sequential stopping decision.
+
+    Stopping rule: stop when the Savage-Dickey BF₁₀ exceeds
+    ``bf_upper`` (evidence for H₁), falls below ``bf_lower`` (evidence
+    for H₀), or when both arms reach ``n_max`` (if set).
+    """
+
+    def __init__(
+        self,
+        alpha0: float = 1.0,
+        beta0: float = 1.0,
+        threshold: float = 0.7,
+        bf_upper: float = 10.0,
+        bf_lower: float = 0.1,
+        n_max: int | None = None,
+        n_min: int = 0,
+        decision_rule: DecisionRuleType = "all",
+        rope_epsilon: float = 0.02,
+        seed: int = 0,
+        n_samples: int = 20_000,
+        n_quad: int = 100,
+        verbose: bool = False,
+    ) -> None:
+        """Initialise the sequential non-paired test.
+
+        Args:
+            alpha0: Prior alpha for both arms (used at look 0).
+            beta0: Prior beta for both arms (used at look 0).
+            threshold: Binarization threshold for continuous scores.
+            bf_upper: Stop for H₁ when BF₁₀ ≥ this value.
+            bf_lower: Stop for H₀ when BF₁₀ ≤ this value.
+            n_max: If set, stop once min(n_A, n_B) ≥ n_max.
+            n_min: Minimum samples per arm before any BF-based stopping
+                decision is allowed (guards against unstable early BFs).
+            decision_rule: Decision framework passed to
+                :meth:`NonPairedBayesPropTest.decide` at each look.
+            rope_epsilon: Half-width of the ROPE on Δ = θ_A − θ_B.
+            seed: Random seed for Monte Carlo draws of Δ.
+            n_samples: Number of Monte Carlo draws per look.
+            n_quad: Gauss-Legendre quadrature nodes for P(B > A).
+            verbose: If True, print a one-line summary per look.
+        """
+        if bf_lower >= bf_upper:
+            raise ValueError("bf_lower must be strictly less than bf_upper")
+        if bf_lower <= 0:
+            raise ValueError("bf_lower must be positive")
+
+        # Original prior — kept for the Savage-Dickey prior-at-null term.
+        self.alpha0 = alpha0
+        self.beta0 = beta0
+        self.threshold = threshold
+        self.bf_upper = bf_upper
+        self.bf_lower = bf_lower
+        self.n_max = n_max
+        self.n_min = n_min
+        self.decision_rule = decision_rule
+        self.rope_epsilon = rope_epsilon
+        self.seed = seed
+        self.n_samples = n_samples
+        self.n_quad = n_quad
+        self.verbose = verbose
+
+        # Running Beta posterior state (= prior for the next batch).
+        # These four numbers are sufficient statistics for everything
+        # downstream — no raw data needs to be retained.
+        self.posterior_state: dict[str, float] = {
+            "alpha_A": float(alpha0),
+            "beta_A": float(beta0),
+            "alpha_B": float(alpha0),
+            "beta_B": float(beta0),
+        }
+        self.n_A: int = 0
+        self.n_B: int = 0
+        self.successes_A: int = 0
+        self.successes_B: int = 0
+
+        self.history: list[SequentialLookResult] = []
+        self._stopped: bool = False
+        self._stop_reason: str | None = None
+
+    # ------------------------------------------------------------------ #
+    #  Public API
+    # ------------------------------------------------------------------ #
+
+    @property
+    def stopped(self) -> bool:
+        """True once a stopping rule has triggered."""
+        return self._stopped
+
+    @property
+    def stop_reason(self) -> str | None:
+        """Reason for stopping, or None if still continuing."""
+        return self._stop_reason
+
+    def _binarize(self, y: npt.ArrayLike) -> np.ndarray:
+        """Return 0/1 array; binarize at ``self.threshold`` if needed."""
+        arr = np.asarray(y, dtype=float)
+        if arr.size and not np.all((arr == 0.0) | (arr == 1.0)):
+            arr = (arr >= self.threshold).astype(float)
+        return arr
+
+    def update(
+        self,
+        y_a_batch: npt.ArrayLike,
+        y_b_batch: npt.ArrayLike,
+    ) -> SequentialLookResult:
+        """Incorporate a new batch and return the updated snapshot.
+
+        Args:
+            y_a_batch: New observations for arm A (continuous or binary).
+            y_b_batch: New observations for arm B (continuous or binary).
+
+        Returns:
+            :class:`SequentialLookResult` for this look, also appended to
+            :attr:`history`.
+
+        Raises:
+            RuntimeError: If called after the stopping rule has fired.
+        """
+        if self._stopped:
+            raise RuntimeError(f"Sequential test already stopped: {self._stop_reason}")
+
+        ya = self._binarize(y_a_batch)
+        yb = self._binarize(y_b_batch)
+        sA, sB = int(ya.sum()), int(yb.sum())
+        nA, nB = len(ya), len(yb)
+
+        # Conjugate update of the running posterior state.
+        ps = self.posterior_state
+        ps["alpha_A"] += sA
+        ps["beta_A"] += nA - sA
+        ps["alpha_B"] += sB
+        ps["beta_B"] += nB - sB
+        self.n_A += nA
+        self.n_B += nB
+        self.successes_A += sA
+        self.successes_B += sB
+
+        snap = self._snapshot()
+        self.history.append(snap)
+
+        if self.verbose:
+            bf10 = (
+                snap.decision.bayes_factor.BF_10
+                if snap.decision.bayes_factor
+                else float("nan")
+            )
+            print(
+                f"[look {snap.look}] n_A={snap.n_A} n_B={snap.n_B} "
+                f"P(B>A)={snap.P_B_greater_A:.3f} BF10={bf10:.3g} "
+                f"stop={snap.stop} ({snap.stop_reason})"
+            )
+
+        return snap
+
+    def run(
+        self,
+        batches: Iterable[tuple[npt.ArrayLike, npt.ArrayLike]],
+    ) -> SequentialLookResult:
+        """Consume a stream of batches until stopping or exhaustion.
+
+        Args:
+            batches: Iterable yielding ``(y_a_batch, y_b_batch)`` pairs.
+
+        Returns:
+            The final :class:`SequentialLookResult`.
+        """
+        last: SequentialLookResult | None = None
+        for ya, yb in batches:
+            last = self.update(ya, yb)
+            if self._stopped:
+                break
+        if last is None:
+            raise ValueError("`batches` was empty; nothing to update.")
+        return last
+
+    def history_frame(self) -> pd.DataFrame:
+        """Return the per-look history as a tidy DataFrame for plotting."""
+        rows = []
+        for s in self.history:
+            bf = s.decision.bayes_factor
+            rope = s.decision.rope
+            rows.append(
+                {
+                    "look": s.look,
+                    "n_A": s.n_A,
+                    "n_B": s.n_B,
+                    "alpha_A": s.posterior_state.alpha_A,
+                    "beta_A": s.posterior_state.beta_A,
+                    "alpha_B": s.posterior_state.alpha_B,
+                    "beta_B": s.posterior_state.beta_B,
+                    "P_B_gt_A": s.P_B_greater_A,
+                    "BF_10": bf.BF_10 if bf else np.nan,
+                    "BF_01": bf.BF_01 if bf else np.nan,
+                    "pct_in_rope": rope.pct_in_rope if rope else np.nan,
+                    "stop": s.stop,
+                    "stop_reason": s.stop_reason,
+                }
+            )
+        return pd.DataFrame(rows)
+
+    def plot_trajectory(self, **kwargs: Any) -> None:
+        """Plot BF₁₀ and P(B > A) trajectories across looks.
+
+        Args:
+            **kwargs: Accepts ``figsize`` (default ``(12, 4)``).
+        """
+        import matplotlib.pyplot as plt
+
+        if not self.history:
+            raise RuntimeError("No history yet; call .update() first.")
+
+        df = self.history_frame()
+        figsize = kwargs.pop("figsize", (12, 4))
+        fig, axes = plt.subplots(1, 2, figsize=figsize)
+
+        ax = axes[0]
+        ax.plot(df["n_A"] + df["n_B"], df["BF_10"], marker="o", color="#E91E63")
+        ax.axhline(
+            self.bf_upper,
+            ls="--",
+            color="gray",
+            alpha=0.7,
+            label=f"BF₁₀ = {self.bf_upper}",
+        )
+        ax.axhline(
+            self.bf_lower,
+            ls="--",
+            color="gray",
+            alpha=0.7,
+            label=f"BF₁₀ = {self.bf_lower}",
+        )
+        ax.set_yscale("log")
+        ax.set_xlabel("Cumulative n_A + n_B")
+        ax.set_ylabel("BF₁₀ (log scale)")
+        ax.set_title("Sequential Bayes Factor")
+        ax.grid(alpha=0.3)
+        ax.legend(fontsize=8)
+
+        ax = axes[1]
+        ax.plot(df["n_A"] + df["n_B"], df["P_B_gt_A"], marker="o", color="#3F51B5")
+        ax.axhline(0.5, ls=":", color="gray", alpha=0.7)
+        ax.set_xlabel("Cumulative n_A + n_B")
+        ax.set_ylabel("P(θ_B > θ_A)")
+        ax.set_title("Posterior probability of superiority")
+        ax.set_ylim(0, 1)
+        ax.grid(alpha=0.3)
+
+        fig.tight_layout()
+        plt.show()
+
+    # ------------------------------------------------------------------ #
+    #  Internals
+    # ------------------------------------------------------------------ #
+
+    def _snapshot(self) -> SequentialLookResult:
+        """Compute decision metrics for the current posterior state.
+
+        Bypasses ``NonPairedBayesPropTest.fit`` (no raw data needed):
+        the posterior parameters are sufficient statistics for every
+        downstream quantity (Savage-Dickey BF, ROPE, P(B > A)).
+        """
+        ps = self.posterior_state
+
+        # Build a NonPairedBayesPropTest in a "fitted" state directly
+        # from the running posterior parameters.
+        bb = NonPairedBayesPropTest(
+            alpha0=self.alpha0,
+            beta0=self.beta0,
+            threshold=self.threshold,
+            n_quad=self.n_quad,
+            seed=self.seed,
+            n_samples=self.n_samples,
+            decision_rule=self.decision_rule,
+            rope_epsilon=self.rope_epsilon,
+        )
+        bb.a_A, bb.b_A = ps["alpha_A"], ps["beta_A"]
+        bb.a_B, bb.b_B = ps["alpha_B"], ps["beta_B"]
+
+        rng = np.random.default_rng(self.seed)
+        bb.theta_A_samples = rng.beta(bb.a_A, bb.b_A, size=self.n_samples)
+        bb.theta_B_samples = rng.beta(bb.a_B, bb.b_B, size=self.n_samples)
+        bb.delta_samples = bb.theta_A_samples - bb.theta_B_samples
+        bb.p_B_greater_A = bb.prob_greater(bb.a_B, bb.b_B, bb.a_A, bb.b_A)
+
+        decision = bb.decide()
+
+        # Stopping rule.
+        bf10 = decision.bayes_factor.BF_10 if decision.bayes_factor else None
+        n_min_pair = min(self.n_A, self.n_B)
+        stop, reason = False, None
+        if self.n_max is not None and n_min_pair >= self.n_max:
+            stop, reason = True, "n_max reached"
+        elif bf10 is not None and n_min_pair >= self.n_min:
+            if bf10 >= self.bf_upper:
+                stop, reason = True, f"BF10 ≥ {self.bf_upper} (evidence for H1)"
+            elif bf10 <= self.bf_lower:
+                stop, reason = True, f"BF10 ≤ {self.bf_lower} (evidence for H0)"
+        if stop:
+            self._stopped = True
+            self._stop_reason = reason
+
+        return SequentialLookResult(
+            look=len(self.history) + 1,
+            n_A=self.n_A,
+            n_B=self.n_B,
+            successes_A=self.successes_A,
+            successes_B=self.successes_B,
+            posterior_state=SequentialPosteriorState(
+                alpha_A=ps["alpha_A"],
+                beta_A=ps["beta_A"],
+                alpha_B=ps["alpha_B"],
+                beta_B=ps["beta_B"],
+            ),
+            P_B_greater_A=float(bb.p_B_greater_A),
+            decision=decision,
+            stop=stop,
+            stop_reason=reason,
+        )
 
 
 def descriptive_summary(
