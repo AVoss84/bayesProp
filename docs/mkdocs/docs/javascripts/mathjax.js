@@ -4,6 +4,10 @@ window.MathJax = {
     displayMath: [["\\[", "\\]"]],
     processEscapes: true,
     processEnvironments: true,
+    packages: { "[+]": ["boldsymbol", "ams", "newcommand", "configmacros"] },
+  },
+  loader: {
+    load: ["[tex]/boldsymbol", "[tex]/ams", "[tex]/newcommand", "[tex]/configmacros"],
   },
   options: {
     ignoreHtmlClass: ".*|",

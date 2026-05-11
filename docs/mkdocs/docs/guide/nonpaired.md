@@ -257,11 +257,17 @@ Bayes factor is fully deterministic.
 from bayesprop.utils.utils import simulate_nonpaired_scores
 from bayesprop.resources.bayes_nonpaired import NonPairedBayesPropTest
 
-sim = simulate_nonpaired_scores(N=150, theta_A=0.80, theta_B=0.60, seed=42)
+sim = simulate_nonpaired_scores(N=150, theta_A=0.80, theta_B=0.75, seed=42)
 
 print(f"True θ_A = {sim.theta_A:.2f},  θ_B = {sim.theta_B:.2f}")
 print(f"True Δ   = {sim.theta_A - sim.theta_B:.2f}")
 print(f"Observed rates: A = {sim.y_A.mean():.3f},  B = {sim.y_B.mean():.3f}")
+```
+
+```text
+True θ_A = 0.80,  θ_B = 0.75
+True Δ   = 0.05
+Observed rates: A = 0.860,  B = 0.720
 ```
 
 ### 2. Fit the model
@@ -280,6 +286,21 @@ print(f"95% CI = [{s.ci_95.lower:.4f}, {s.ci_95.upper:.4f}]")
 print(f"P(A > B) = {s.p_A_greater_B:.4f}")
 ```
 
+```text
+Mean Δ (θ_A − θ_B) = +0.1381
+95% CI = [0.0469, 0.2288]
+P(A > B) = 0.9981
+```
+
+!!! note "Two estimators for `P(A > B)`"
+    `summary.p_A_greater_B` uses Monte Carlo on the joint posterior
+    samples, while `model.prob_greater()` uses Gauss–Legendre
+    quadrature against the analytic Beta posteriors. Both estimate
+    the same probability and agree to MC error
+    ($\sim 1/\sqrt{n_\text{samples}}$); they will not, however, sum
+    to exactly 1 with `prob_greater(reverse=True)` because they come
+    from different estimators.
+
 ### 3. Unified decision (BF + P(H₀) + ROPE)
 
 ```python
@@ -290,6 +311,16 @@ print(f"Posterior Null: P(H₀|D) = {d.posterior_null.p_H0:.4f}  → {d.posterio
 print(f"ROPE:          {d.rope.decision}  ({d.rope.pct_in_rope:.1%} in ROPE)")
 ```
 
+```text
+Bayes Factor:  BF₁₀ = 9.91  → Reject H0
+Posterior Null: P(H₀|D) = 0.0917  → Undecided
+ROPE:          Reject H0 — A practically better  (0.6% in ROPE)
+```
+
+$BF_{10}=9.91$ sits at the upper edge of "moderate" on Jeffreys' scale
+($BF_{10}=10$ is the boundary to "strong"); a longer MC run
+(`n_samples=100_000`) can nudge it across.
+
 ### 4. Plot posteriors
 
 ```python
@@ -298,46 +329,7 @@ model.plot_posteriors(title="Beta-Bernoulli Posteriors")
 
 ![Posterior distributions of θ_A, θ_B, and Δ](../images/non-paired/posterior_distributions.png)
 
-### 5. Exact convolution vs Monte Carlo
-
-Visualise the exact density of $\Delta$ alongside MC samples:
-
-```python
-import numpy as np
-import matplotlib.pyplot as plt
-from bayesprop.resources.bayes_nonpaired import beta_diff_pdf
-
-z_grid = np.linspace(-0.5, 0.8, 500)
-
-post_density = np.array([
-    beta_diff_pdf(z, model.a_A, model.b_A, model.a_B, model.b_B)
-    for z in z_grid
-])
-prior_density = np.array([
-    beta_diff_pdf(z, 1.0, 1.0, 1.0, 1.0)
-    for z in z_grid
-])
-
-fig, ax = plt.subplots(figsize=(8, 5))
-ax.plot(z_grid, post_density, color="#9C27B0", linewidth=2, label="Posterior (exact)")
-ax.fill_between(z_grid, post_density, alpha=0.15, color="#9C27B0")
-ax.plot(z_grid, prior_density, color="gray", linewidth=1.5, linestyle="--",
-        alpha=0.7, label="Prior (Beta(1,1) diff)")
-ax.hist(model.delta_samples, bins=80, density=True, alpha=0.25, color="#9C27B0",
-        edgecolor="white", label="MC samples")
-ax.axvline(0, color="gray", linestyle="--", linewidth=1, alpha=0.5)
-ax.set_xlabel("Δ = θ_A − θ_B")
-ax.set_ylabel("Density")
-ax.set_title("Exact Convolution vs MC Histogram")
-ax.legend(fontsize=9)
-ax.grid(alpha=0.3)
-plt.tight_layout()
-plt.show()
-```
-
-![Exact convolution vs MC histogram](../images/non-paired/exact_convolution_vs_mc.png)
-
-### 6. Savage-Dickey plot
+### 5. Savage-Dickey plot
 
 ```python
 model.plot_savage_dickey(title="Savage-Dickey (exact convolution)")
@@ -345,7 +337,7 @@ model.plot_savage_dickey(title="Savage-Dickey (exact convolution)")
 
 ![Savage-Dickey Bayes factor plot](../images/non-paired/savage_dickey_bayes_factor.png)
 
-### 7. Posterior predictive checks
+### 6. Posterior predictive checks
 
 ```python
 ppc = model.ppc_pvalues(seed=42)
@@ -356,44 +348,31 @@ for stat, vals in ppc.items():
     print(f"{stat:<25} {vals.observed:>10.4f} {vals.p_value:>10.3f} {vals.status:>8}")
 ```
 
-A p-value < 0.05 flags that the observed statistic is extreme under the
-fitted model (potential misfit); p-value > 0.05 means the model reproduces
-that aspect of the data adequately.
-
-## Multi-metric comparison
-
-When you have multiple metrics (e.g. Faithfulness, Answer Relevancy), fit
-a separate model for each and compare them side-by-side:
-
-```python
-results = {}
-for metric_name, y_a, y_b in metric_data:
-    m = NonPairedBayesPropTest(seed=42, n_samples=50_000).fit(y_a, y_b)
-    results[metric_name] = m
-    d_m = m.decide()
-    print(f"{metric_name:<22} Δ={m.summary.mean_delta:+.4f}  "
-          f"P(A>B)={m.summary.p_A_greater_B:.4f}  "
-          f"BF₁₀={d_m.bayes_factor.BF_10:.2f}  {d_m.bayes_factor.decision}")
+```text
+Statistic                   Observed    p-value   Status
+-------------------------------------------------------
+mean(y_A)                     0.8600      0.953       OK
+mean(y_B)                     0.7200      0.974       OK
+mean(y_A)-mean(y_B)           0.1400      0.979       OK
 ```
 
-### Forest plot
+A p-value $< 0.05$ flags that the observed statistic is extreme under
+the fitted model (potential misfit); $> 0.05$ means the model
+reproduces that aspect of the data adequately. The two-sided p-value
+uses the **mid-p** convention (ties at $T^{\text{rep}}=T^{\text{obs}}$
+are split evenly between the two tails) so it does not clip at 1.0
+on discrete data.
 
-```python
-NonPairedBayesPropTest.plot_forest(
-    results,
-    label_A="Model v2",
-    label_B="Model v1",
-    title="Model v2 vs v1 — Non-Paired Beta-Bernoulli",
-)
-```
-
-![Forest plot of all metrics](../images/non-paired/forest_plot_all_metrics.png)
-
-### Comparison table
-
-```python
-NonPairedBayesPropTest.print_comparison_table(results)
-```
+!!! warning "Saturated model — interpret with care"
+    For the conjugate Beta-Bernoulli model the sample mean is a
+    **sufficient statistic** for each group, so PPC checks based on
+    the means (and any deterministic function of them, including the
+    sample variance for binary data) are guaranteed to be close to
+    the centre of the replicated distribution. P-values near 1.0 are
+    therefore expected here and *do not* constitute a strong test of
+    fit — they only catch gross misspecification (e.g. wrong
+    likelihood family). Meaningful PPC requires either covariates or
+    a hierarchical structure that the sample mean does not summarise.
 
 ## Prior sensitivity analysis
 

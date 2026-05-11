@@ -124,7 +124,7 @@ For exact posterior inference with convergence diagnostics, see
 from bayesprop.resources.bayes_paired_laplace import PairedBayesPropTest
 from bayesprop.utils.utils import simulate_paired_scores
 
-sim = simulate_paired_scores(N=150, delta_A=0.8, sigma_theta=0.0, seed=42)
+sim = simulate_paired_scores(N=250, delta_A=0.8, sigma_theta=0.0, seed=42)
 
 print(f"True δ_A = {sim.true_params.delta_A}")
 print(f"Observed rates: A = {sim.y_A.mean():.3f},  B = {sim.y_B.mean():.3f}")
@@ -159,60 +159,30 @@ print(f"ROPE:          {d.rope.decision}  ({d.rope.pct_in_rope:.1%} in ROPE)")
 ### 4. Laplace posterior visualisation
 
 The Laplace approximation produces a bivariate Gaussian in $(\mu, \delta_A)$.
-You can inspect the marginals:
-
-```python
-import numpy as np
-import matplotlib.pyplot as plt
-from scipy.stats import norm
-
-laplace = model.laplace
-mu_map, delta_map = laplace['map']
-cov = laplace['cov']
-
-fig, axes = plt.subplots(1, 2, figsize=(14, 4))
-
-# δ_A marginal
-ax = axes[0]
-delta_s = laplace['delta_A_samples']
-ax.hist(delta_s, bins=60, density=True, alpha=0.6, color='#2196F3', edgecolor='white')
-x = np.linspace(delta_s.min() - 0.3, delta_s.max() + 0.3, 300)
-sd_d = np.sqrt(cov[1, 1])
-ax.plot(x, norm.pdf(x, delta_map, sd_d), 'r-', lw=2,
-        label=f'N({delta_map:.3f}, {sd_d:.3f}²)')
-ax.axvline(0, color='gray', ls='--', alpha=0.5)
-ax.set_xlabel('δ_A (logit scale)')
-ax.set_title('δ_A posterior', fontweight='bold')
-ax.legend(fontsize=8)
-ax.grid(alpha=0.3)
-
-# μ marginal
-ax = axes[1]
-mu_s = laplace['mu_samples']
-ax.hist(mu_s, bins=60, density=True, alpha=0.6, color='#4CAF50', edgecolor='white')
-x_mu = np.linspace(mu_s.min() - 0.3, mu_s.max() + 0.3, 300)
-sd_m = np.sqrt(cov[0, 0])
-ax.plot(x_mu, norm.pdf(x_mu, mu_map, sd_m), 'r-', lw=2,
-        label=f'N({mu_map:.3f}, {sd_m:.3f}²)')
-ax.set_xlabel('μ (logit scale)')
-ax.set_title('μ posterior', fontweight='bold')
-ax.legend(fontsize=8)
-ax.grid(alpha=0.3)
-
-plt.tight_layout()
-plt.show()
-
-print(f"MAP: μ={mu_map:.4f}, δ_A={delta_map:.4f}")
-print(f"Posterior sd: μ={sd_m:.4f}, δ_A={sd_d:.4f}")
-print(f"Correlation: {cov[0,1]/np.sqrt(cov[0,0]*cov[1,1]):.3f}")
-```
-
-![Laplace posterior marginals](../images/paired-laplace/laplace_posterior_marginals_answer_relevancy.png)
-
-Or use the built-in method:
+Use the built-in method to inspect the implied probability posteriors
+$p_A = \sigma(\mu + \delta_A)$, $p_B = \sigma(\mu)$ and their difference
+$\Delta = p_A - p_B$:
 
 ```python
 model.plot_laplace_posterior()
+```
+
+![Laplace posterior marginals](../images/paired-laplace/laplace_posterior_marginals.png)
+
+If you need the raw MAP / covariance values for a custom plot, they are
+available on the fitted model:
+
+```python
+import numpy as np
+
+laplace = model.laplace
+mu_map, delta_map = laplace["map"]
+cov = laplace["cov"]
+sd_m, sd_d = np.sqrt(cov[0, 0]), np.sqrt(cov[1, 1])
+
+print(f"MAP: μ={mu_map:.4f}, δ_A={delta_map:.4f}")
+print(f"Posterior sd: μ={sd_m:.4f}, δ_A={sd_d:.4f}")
+print(f"Correlation: {cov[0, 1] / (sd_m * sd_d):.3f}")
 ```
 
 ### 5. Posterior of Delta on the probability scale
@@ -221,7 +191,7 @@ model.plot_laplace_posterior()
 model.plot_posterior_delta()
 ```
 
-![Posterior delta KDE](../images/paired-laplace/posterior_delta_A_kde_metrics.png)
+![Posterior delta KDE](../images/paired-laplace/posterior_delta_A_kde.png)
 
 ### 6. Savage-Dickey Bayes Factor plot
 
@@ -250,51 +220,6 @@ model.plot_ppc(seed=42)
 
 ![Posterior predictive checks](../images/paired-laplace/ppc_binomial_model.png)
 
-## Multi-metric comparison
-
-When you have multiple paired metrics, fit a model per metric and compare:
-
-```python
-import numpy as np
-
-comparison_results = {}
-
-for metric in metric_names:
-    m = cached['metrics'][metric]
-    s_A = np.array(m['s_A_raw'])
-    s_B = np.array(m['s_B_raw'])
-
-    n = min(len(s_A), len(s_B))
-    y_A = (s_A[:n] >= 0.7).astype(int)
-    y_B = (s_B[:n] >= 0.7).astype(int)
-
-    model = PairedBayesPropTest(seed=42).fit(y_A, y_B)
-    comparison_results[metric] = model
-
-    s = model.summary
-    print(f"{metric:<22} Δ={s.mean_delta:+.4f}  "
-          f"P(A>B)={s.p_A_greater_B:.4f}  "
-          f"BF₁₀={model.decide().bayes_factor.BF_10:.2f}")
-```
-
-### Forest plot
-
-```python
-PairedBayesPropTest.plot_forest(
-    comparison_results,
-    label_A="Group A",
-    label_B="Group B",
-)
-```
-
-![Forest plot with credible intervals](../images/paired-laplace/posterior_delta_credible_intervals.png)
-
-### Comparison table
-
-```python
-PairedBayesPropTest.print_comparison_table(comparison_results)
-```
-
 ## Prior sensitivity analysis
 
 ### Sensitivity to prior P(H0)
@@ -313,33 +238,11 @@ model.plot_sensitivity(prior_H0=0.5)
 The Savage-Dickey BF depends on the prior at $\delta_A = 0$. For a
 $\mathcal{N}(0, \sigma_s)$ slab prior, a wider slab concentrates less
 density at zero, inflating $BF_{10}$. This is the Jeffreys-Lindley
-paradox in action:
+paradox in action. The right panel of `plot_sensitivity` above already
+sweeps $\sigma_s$ on a log scale, so no extra code is needed:
 
 ```python
-import numpy as np
-import matplotlib.pyplot as plt
-from scipy.stats import gaussian_kde, norm
-
-sigma_grid = np.linspace(0.25, 5.0, 100)
-samples = model.delta_A_samples
-kde = gaussian_kde(samples)
-post_at_0 = float(kde(0.0)[0])
-
-bf10_vals = [norm.pdf(0, 0, s) / post_at_0 for s in sigma_grid]
-
-fig, ax = plt.subplots(figsize=(8, 5))
-ax.plot(sigma_grid, bf10_vals, linewidth=2)
-ax.axhline(3, color='red', linestyle='--', alpha=0.5, label='BF₁₀ = 3')
-ax.axhline(1, color='gray', linestyle=':', alpha=0.5, label='BF₁₀ = 1')
-ax.axvline(1.0, color='gray', linestyle='--', alpha=0.3, label='σ_s = 1 (default)')
-ax.set_xlabel('Slab width σ_s')
-ax.set_ylabel('BF₁₀')
-ax.set_title('Sensitivity: BF₁₀ vs Slab Width')
-ax.set_yscale('log')
-ax.legend(fontsize=9)
-ax.grid(alpha=0.3)
-plt.tight_layout()
-plt.show()
+model.plot_sensitivity(prior_H0=0.5)
 ```
 
 ![Sensitivity to slab width](../images/paired-laplace/sensitivity_slab_width_binomial.png)

@@ -11,6 +11,7 @@ from source code docstrings.
 | [Non-Paired Model](bayes_nonpaired.md) | Independent Beta-Bernoulli A/B test |
 | [Paired Model (Laplace)](bayes_paired_laplace.md) | Paired logistic model with Laplace approximation |
 | [Paired Model (Pólya-Gamma)](bayes_paired_pg.md) | Paired logistic model with PG Gibbs sampler |
+| [Sequential designs](sequential.md) | Warm-started sequential variants of the non-paired and paired-Laplace models |
 | [Utilities](bfda_utils.md) | BFDA, simulation & sample-size planning |
 
 ## Shared decision-rule interface
@@ -19,7 +20,7 @@ All three model classes expose the same methods for hypothesis testing:
 
 | Method | Return type | Description |
 |--------|-------------|-------------|
-| `model.decide()` | `HypothesisDecision` | Run BF + P(H₀) + ROPE in a single call |
-| `model.savage_dickey_test()` | `SavageDickeyResult` | Savage-Dickey Bayes factor |
-| `model.posterior_probability_H0()` | `PosteriorProbH0Result` | Posterior null probability |
-| `model.rope_test()` | `ROPEResult` | ROPE analysis |
+| `model.decide(rule=None)` | `HypothesisDecision` | Run BF + P(H₀) + ROPE in a single call |
+| `model.savage_dickey_test(null_value=0.0)` | `SavageDickeyResult` | Savage-Dickey Bayes factor at the null |
+| `Model.posterior_probability_H0(BF_01, prior_H0=0.5)` | `PosteriorProbH0Result` | Static: convert a BF₀₁ to posterior P(H₀ ∣ D) |
+| `model.rope_test(rope=None, ci_mass=0.95)` | `ROPEResult` | ROPE analysis on the difference posterior |

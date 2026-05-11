@@ -86,4 +86,5 @@ nav:
       - Non-Paired Model: api/bayes_nonpaired.md
       - Paired Model (Laplace): api/bayes_paired_laplace.md
       - Paired Model (Pólya-Gamma): api/bayes_paired_pg.md
+      - Sequential designs: api/sequential.md
       - Utilities: api/bfda_utils.md

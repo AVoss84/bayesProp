@@ -472,11 +472,31 @@ class NonPairedBayesPropTest:
     def ppc_pvalues(self, seed: int | None = None) -> dict[str, PPCStatistic]:
         """Posterior predictive p-values for summary statistics.
 
-        For each summary statistic (group means, mean difference),
+        For each summary statistic (group means and mean difference),
         replicated datasets are drawn from the posterior predictive
-        distribution and a two-sided p-value is computed as the
-        fraction of replicates at least as extreme as the observed
-        value.
+        distribution and a two-sided ``mid-p`` value is computed as
+
+        .. math::
+
+            p = 2\\,\\min\\!\\bigl(P(T^{\\text{rep}} > T^{\\text{obs}})
+                + \\tfrac{1}{2} P(T^{\\text{rep}} = T^{\\text{obs}}),\\;
+                P(T^{\\text{rep}} < T^{\\text{obs}})
+                + \\tfrac{1}{2} P(T^{\\text{rep}} = T^{\\text{obs}})\\bigr).
+
+        The mid-p correction splits the probability mass at exact ties
+        evenly between the two tails, which prevents the p-value from
+        clipping at 1.0 when ``T^rep`` and ``T^obs`` coincide often
+        (a common occurrence for binary data, where the sample mean
+        lives on the coarse grid ``k/n``).
+
+        Note:
+            For the conjugate Beta-Bernoulli model the sample mean is
+            the sufficient statistic for each group, so PPC p-values
+            for the means are expected to be close to 1.0 by
+            construction.  They are reported here only as a sanity
+            check against gross misspecification (e.g. wrong
+            likelihood family) and should not be interpreted as a
+            strong test of fit for this saturated model.
 
         Args:
             seed: Random seed for reproducibility.  Falls back to
@@ -513,19 +533,33 @@ class NonPairedBayesPropTest:
             ),
         }
 
+        # Tolerance for floating-point ties (statistics on binary data
+        # live on the coarse grid k/n, so exact equality is common).
+        atol = 1e-12
+
         results: dict[str, PPCStatistic] = {}
         for stat_name, (obs_val, rep_vals) in checks.items():
-            p_val = min(
-                2
-                * min(
-                    float((rep_vals >= obs_val).mean()),
-                    float((rep_vals <= obs_val).mean()),
-                ),
-                1.0,
-            )
+            rep_arr = np.asarray(rep_vals, dtype=float)
+            # Decompose the replicated distribution into three disjoint
+            # masses relative to the observed statistic: strictly less,
+            # equal (within tolerance), and strictly greater.
+            p_eq = float(np.mean(np.abs(rep_arr - obs_val) <= atol))
+            p_gt = float(np.mean(rep_arr > obs_val + atol))
+            p_lt = float(np.mean(rep_arr < obs_val - atol))
+            # Mid-p one-sided tail probabilities: assign half of the
+            # tie mass to each tail so that the p-value remains
+            # uniform under the null even when the test statistic
+            # is discrete (Lancaster, 1961).
+            p_ge_mid = p_gt + 0.5 * p_eq
+            p_le_mid = p_lt + 0.5 * p_eq
+            # Two-sided mid-p value, clipped at 1.0 to guard against
+            # tiny numerical overshoot when both tails are ~0.5.
+            p_val = min(2.0 * min(p_ge_mid, p_le_mid), 1.0)
             results[stat_name] = PPCStatistic(
                 observed=float(obs_val),
                 p_value=p_val,
+                # WARN flags p < 0.05 (observed statistic in the
+                # extreme 5% of the posterior predictive distribution).
                 status="OK" if p_val > 0.05 else "WARN",
             )
         return results

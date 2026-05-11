@@ -184,35 +184,6 @@ $p(\boldsymbol{\beta} \mid \mathbf{y})$ from the Gibbs sampler
 targets the true posterior — there is no approximation error beyond
 finite MCMC variance.
 
-## MCMC convergence diagnostics
-
-### Gelman-Rubin R-hat
-
-With $m$ independent chains of length $n$, the potential scale reduction
-factor is:
-
-$$
-\hat{R} = \sqrt{\frac{\hat{\text{var}}^+}{W}}
-\qquad\text{where}\qquad
-\hat{\text{var}}^+ = \frac{n-1}{n}\,W + \frac{B}{n}
-$$
-
-- $B = \frac{n}{m-1}\sum_{c}(\bar{\theta}_c - \bar{\theta})^2$ (between-chain variance)
-- $W$ = mean of within-chain variances
-
-**Target:** $\hat{R} < 1.05$
-
-### Effective Sample Size (ESS)
-
-Computed via FFT-based autocorrelation, summing autocorrelation pairs until
-they turn negative:
-
-$$
-\text{ESS} = \frac{n \cdot m}{1 + 2\sum_{k=1}^{K} \hat{\rho}(k)}
-$$
-
-**Target:** ESS > 400
-
 ## When to use
 
 - **Exact inference** — no approximation error, exact up to MCMC error
@@ -234,13 +205,18 @@ from bayesprop.resources.bayes_paired_pg import PairedBayesPropTestPG, sigmoid
 from bayesprop.resources.bayes_paired_laplace import PairedBayesPropTest
 from bayesprop.utils.utils import simulate_paired_scores
 
-sim = simulate_paired_scores(N=200, delta_A=0.5, sigma_theta=0.0, seed=42)
+sim = simulate_paired_scores(N=250, delta_A=1.0, sigma_theta=0.0, seed=42)
 
 y_A = sim.y_A
 y_B = sim.y_B
 
 print(f"True δ_A = {sim.true_params.delta_A}")
 print(f"Fraction y=1:  A={y_A.mean():.1%},  B={y_B.mean():.1%}")
+```
+
+```text
+True δ_A = 1.0
+Fraction y=1:  A=72.8%,  B=47.6%
 ```
 
 ### 2. Fit the PG Gibbs model
@@ -262,6 +238,13 @@ print(f"95% CI         = [{s.ci_95.lower:.4f}, {s.ci_95.upper:.4f}]")
 print(f"P(A>B)         = {s.p_A_greater_B:.4f}")
 ```
 
+```text
+δ_A posterior mean = +1.0463
+Mean Δ (prob)  = +0.2432
+95% CI         = [0.1623, 0.3225]
+P(A>B)         = 1.0000
+```
+
 ### 3. Unified decision
 
 ```python
@@ -272,7 +255,22 @@ print(f"Posterior Null: P(H₀|D) = {d.posterior_null.p_H0:.4f}  → {d.posterio
 print(f"ROPE:          {d.rope.decision}  ({d.rope.pct_in_rope:.1%} in ROPE)")
 ```
 
+```text
+Bayes Factor:   BF₁₀ = 10^27   → Reject H0
+Posterior Null: P(H₀|D) = 0.0000  → Reject H0
+ROPE:           Reject H0 — A practically better  (0.0% in ROPE)
+```
+
 ### 4. MCMC diagnostics
+
+Two standard diagnostics summarise sampler health:
+
+- **R-hat** (Gelman-Rubin) compares between- and within-chain variance;
+  values close to 1 (target $\hat{R} < 1.05$) indicate the chains have
+  mixed to the same distribution.
+- **ESS** (effective sample size) is the number of independent draws
+  equivalent to the autocorrelated MCMC sample; target ESS > 400 per
+  parameter for stable posterior summaries.
 
 !!! warning "Convergence checks"
     Always verify that **R-hat < 1.05** and **ESS > 400** before
@@ -287,56 +285,14 @@ print(f"δ_A: R-hat={diag.delta_A.r_hat:.3f}, ESS={diag.delta_A.ess:.0f}")
 
 ### 5. Trace and autocorrelation plots
 
-```python
-import matplotlib.pyplot as plt
-
-delta_samples = pg_model.delta_A_samples
-mu_samples = pg_model.samples[:, 0]
-
-fig, axes = plt.subplots(2, 2, figsize=(14, 8))
-
-# Trace plots
-axes[0, 0].plot(delta_samples, alpha=0.6, linewidth=0.5, color="#2196F3")
-axes[0, 0].axhline(delta_samples.mean(), color="red", ls="--", lw=1.5)
-axes[0, 0].set_ylabel("δ_A")
-axes[0, 0].set_title("Trace: δ_A", fontweight="bold")
-axes[0, 0].grid(alpha=0.3)
-
-axes[0, 1].plot(mu_samples, alpha=0.6, linewidth=0.5, color="#4CAF50")
-axes[0, 1].axhline(mu_samples.mean(), color="red", ls="--", lw=1.5)
-axes[0, 1].set_ylabel("μ")
-axes[0, 1].set_title("Trace: μ", fontweight="bold")
-axes[0, 1].grid(alpha=0.3)
-
-# Autocorrelation
-max_lag = 50
-for ax, samples, name, color in [
-    (axes[1, 0], delta_samples, "δ_A", "#2196F3"),
-    (axes[1, 1], mu_samples, "μ", "#4CAF50"),
-]:
-    centered = samples - samples.mean()
-    acf = np.correlate(centered, centered, mode="full")
-    acf = acf[len(acf) // 2:]
-    acf /= acf[0]
-    ax.bar(range(max_lag), acf[:max_lag], color=color, alpha=0.7)
-    ax.axhline(0, color="gray", ls="-", lw=0.5)
-    ax.set_xlabel("Lag")
-    ax.set_ylabel("ACF")
-    ax.set_title(f"Autocorrelation: {name}", fontweight="bold")
-    ax.grid(alpha=0.3)
-
-fig.suptitle("PG Gibbs MCMC Diagnostics", fontsize=13, fontweight="bold", y=1.02)
-plt.tight_layout()
-plt.show()
-```
-
-![MCMC trace and autocorrelation diagnostics](../images/paired-gibbs/mcmc_diagnostics_trace_acf.png)
-
-Or use the built-in trace plot method:
+Use the built-in trace plot — it renders all chains together, with
+per-parameter trace and ACF panels:
 
 ```python
 pg_model.plot_trace()
 ```
+
+![MCMC trace and autocorrelation diagnostics](../images/paired-gibbs/mcmc_diagnostics_trace_acf.png)
 
 ### 6. Savage-Dickey Bayes Factor
 
@@ -368,6 +324,8 @@ gives similar results. Fit both on the same data and compare:
 ```python
 laplace_model = PairedBayesPropTest(seed=42, n_samples=2000).fit(y_A, y_B)
 
+delta_samples = pg_model.delta_A_samples
+mu_samples = pg_model.samples[:, 0]
 laplace_delta = laplace_model.delta_A_samples
 laplace_mu = laplace_model.laplace["mu_samples"]
 
@@ -381,7 +339,7 @@ print(f"{'μ mean':20} {mu_samples.mean():>15.4f} {laplace_mu.mean():>15.4f}")
 print("=" * 55)
 ```
 
-### Posterior overlay plot
+### PG Gibbs vs Laplace: posterior KDEs of μ and δ_A
 
 ```python
 import matplotlib.pyplot as plt
@@ -400,7 +358,7 @@ for samples, label, color in [
     ax.plot(x, kde(x), linewidth=2, color=color, label=label)
     ax.fill_between(x, kde(x), alpha=0.1, color=color)
 
-ax.axvline(0.5, color="green", ls="--", alpha=0.6, label="True δ_A = 0.5")
+ax.axvline(1.0, color="green", ls="--", alpha=0.6, label="True δ_A = 1.0")
 ax.axvline(0, color="gray", ls=":", alpha=0.4)
 ax.set_xlabel("δ_A (logit scale)")
 ax.set_title("δ_A: PG Gibbs vs Laplace", fontweight="bold")

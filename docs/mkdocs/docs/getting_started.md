@@ -92,20 +92,6 @@ print(f"R-hat (δ_A): {diag.delta_A.r_hat:.3f}")
 print(f"ESS (δ_A):   {diag.delta_A.ess:.0f}")
 ```
 
-## Multi-metric comparison
-
-All three model classes support forest plots and comparison tables:
-
-```python
-results = {}
-for metric_name, y_a, y_b in metric_data:
-    m = NonPairedBayesPropTest(seed=42).fit(y_a, y_b)
-    results[metric_name] = m
-
-NonPairedBayesPropTest.plot_forest(results, label_A="Group A", label_B="Group B")
-NonPairedBayesPropTest.print_comparison_table(results)
-```
-
 ## Sample-size planning
 
 Use Bayes Factor Design Analysis (BFDA) to determine how many observations you need:
