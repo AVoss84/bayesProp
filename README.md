@@ -78,11 +78,6 @@ model.plot_savage_dickey()
 │   │   └── utils/
 │   │       └── utils.py                # simulate, BFDA power curves, plots
 │   └── notebooks/
-│       ├── bayesian_AB_model_comparison_nonpaired.ipynb
-│       ├── bayesian_AB_model_comparison_paired_laplace.ipynb
-│       ├── bayesian_AB_model_comparison_paired_gibbs.ipynb
-│       ├── sequential_nonpaired_demo.ipynb
-│       └── sequential_paired_laplace_demo.ipynb
 └── tests/
 ```
 
