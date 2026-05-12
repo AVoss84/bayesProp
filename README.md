@@ -41,44 +41,30 @@ Please check out our [Getting Started](https://avoss84.github.io/bayesProp/getti
 import numpy as np
 from bayesprop.resources.bayes_nonpaired import NonPairedBayesPropTest
 
-y_A = np.array([1,1,0,1,1,0,1,1,0,1,1,1,0,1,1,0,1,1,1,0])
-y_B = np.array([0,1,0,0,1,1,0,1,0,0,1,0,0,1,0,1,0,1,0,0])
+# Binary or [0,1]-valued data:
+y_A = np.array([1,1,0,1,1,0,1,1,1,1,1,1,1,0,1,1,1,0,1,1])     # 16/20 = 0.80
+y_B = np.array([0,1,0,0,1,0,0,1,0,0,1,0,1,0,0,1,0,0,0,0])     #  6/20 = 0.30
 
-# Fit & summarise
+# Fit posterior & summarise
 model = NonPairedBayesPropTest(seed=42).fit(y_A, y_B)
-print(model.summary)           # NonPairedSummary with mean_delta, ci_95, P(A>B), …
 
-# Hypothesis test
-bf = model.savage_dickey_test() # SavageDickeyResult with BF_10, decision, …
+s = model.summary
+print(f"\nMean Δ (θ_A − θ_B) = {s.mean_delta:+.4f}")
+print(f"95% CI = [{s.ci_95.lower:.4f}, {s.ci_95.upper:.4f}]")
+print(f"P(A > B) = {s.p_A_greater_B:.4f}")
+
+# ── Unified decision ─────────────────────────────────────────────────
+d = model.decide()
+bf = d.bayes_factor
+
+print("\n--- Unified Decision ---")
+print(f"  Bayes Factor: BF₁₀ = {bf.BF_10:.2f}  → {bf.decision}")
+print(f"  Posterior Null: P(H₀|D) = {d.posterior_null.p_H0:.4f}  → {d.posterior_null.decision}")
+print(f"  ROPE: {d.rope.decision} ({d.rope.pct_in_rope:.1%} in ROPE)")
 
 # Plots
 model.plot_posteriors()
 model.plot_savage_dickey()
-```
-
-## Package structure
-
-```
-├── pyproject.toml
-├── justfile                   # task runner (just <recipe>)
-├── .pre-commit-config.yaml    # ruff format + lint hooks
-├── data/                      # evaluation datasets
-├── docs/                      # documentation source
-├── src
-│   ├── bayesprop
-│   │   ├── config/            # global_config, YAML configs
-│   │   ├── resources/
-│   │   │   ├── bayes_nonpaired.py      # NonPairedBayesPropTest
-│   │   │   ├── bayes_paired_laplace.py # PairedBayesPropTest
-│   │   │   ├── bayes_paired_pg.py      # PairedBayesPropTestPG
-│   │   │   ├── bfda_utils.py           # BFDA helpers
-│   │   │   └── data_schemas.py         # Pydantic models
-│   │   ├── services/
-│   │   │   └── file.py                 
-│   │   └── utils/
-│   │       └── utils.py                # simulate, BFDA power curves, plots
-│   └── notebooks/
-└── tests/
 ```
 
 ## Installation
