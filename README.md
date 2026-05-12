@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/mkdocs/docs/images/package_logo.PNG" alt="BayesProp Logo" width="300">
+  <img src="https://raw.githubusercontent.com/AVoss84/bayesProp/main/docs/mkdocs/docs/images/package_logo.PNG" alt="BayesProp Logo" width="300">
 </p>
 
 # Bayesian A/B Testing for Proportions
