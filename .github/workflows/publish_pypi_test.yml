@@ -8,6 +8,7 @@ on:
 
 jobs:
   build-and-upload:
+    if: github.actor == 'AVoss84'
     runs-on: ubuntu-latest
 
     permissions:

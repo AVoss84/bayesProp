@@ -17,6 +17,7 @@ concurrency:
 
 jobs:
   build:
+    if: github.actor == 'AVoss84'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
