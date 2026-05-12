@@ -76,7 +76,7 @@ pip install BayesProp
 Or with [uv](https://github.com/astral-sh/uv):
 
 ```bash
-uv pip install BayesProp
+uv add BayesProp
 ```
 
 For development (from source):
