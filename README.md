@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/mkdocs/docs/images/package_logo.PNG" alt="BayesProp Logo" width="300">
+</p>
+
 # Bayesian A/B Testing for Proportions
 
 [![PyPI](https://img.shields.io/pypi/v/BayesProp?logo=pypi&logoColor=white&label=PyPI)](https://pypi.org/project/BayesProp/)

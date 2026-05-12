@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://squidfunk.github.io/mkdocs-material/schema.json
-site_name: bayesprop
+site_name: BayesProp
 site_description: Bayesian A/B testing for proportions
 site_url: https://AVoss84.github.io/bayesProp/
 

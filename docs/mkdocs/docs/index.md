@@ -1,4 +1,8 @@
-# BayesProp - Bayesian testing for proportions
+<p align="center">
+  <img src="images/package_logo.PNG" alt="BayesProp Logo" width="300">
+</p>
+
+# Bayesian testing for proportions
 
 A Python package for **Bayesian hypothesis testing** of success-rate differences in any Bernoulli-like experiment,
 using analytic and approximate inference methods.
