@@ -88,10 +88,10 @@ def beta_diff_pdf(
     x = np.linspace(lower + 1e-12, upper - 1e-12, n_grid)
 
     # log Beta PDFs for θ_A at x
-    log_fA = (a1 - 1) * np.log(x) + (b1 - 1) * np.log(1 - x) - betaln(a1, b1)
+    log_fA = (a1 - 1) * np.log(x) + (b1 - 1) * np.log1p(-x) - betaln(a1, b1)
     # θ_B = x − z
     xb = x - z
-    log_fB = (a2 - 1) * np.log(xb) + (b2 - 1) * np.log(1 - xb) - betaln(a2, b2)
+    log_fB = (a2 - 1) * np.log(xb) + (b2 - 1) * np.log1p(-xb) - betaln(a2, b2)
 
     integrand = np.exp(log_fA + log_fB)
     return float(np.trapezoid(integrand, x))
@@ -177,6 +177,19 @@ class NonPairedBayesPropTest:
     def prob_greater(self, a1: float, b1: float, a2: float, b2: float) -> float:
         """Posterior probability of superiority P(theta1 > theta2) via Gauss-Legendre quadrature.
 
+        Computes:
+
+        .. math::
+
+            P(\\theta_1 > \\theta_2) = \\int_0^1 f_{\\theta_1}(x) \\, F_{\\theta_2}(x) \\, dx
+
+        where :math:`f_{\\theta_1}` is the Beta(a1, b1) PDF and
+        :math:`F_{\\theta_2}` is the Beta(a2, b2) CDF (regularized
+        incomplete Beta function).
+
+        Uses ``np.log1p(-x)`` instead of ``np.log(1 - x)`` for improved
+        numerical stability near x = 1.
+
         Args:
             a1: Alpha parameter of the first Beta distribution.
             b1: Beta parameter of the first Beta distribution.
@@ -188,7 +201,7 @@ class NonPairedBayesPropTest:
             that a draw from Beta(a1, b1) exceeds a draw from Beta(a2, b2).
         """
         x, w = self._x, self._w
-        log_pdf1 = (a1 - 1) * np.log(x) + (b1 - 1) * np.log(1 - x) - betaln(a1, b1)
+        log_pdf1 = (a1 - 1.0) * np.log(x) + (b1 - 1.0) * np.log1p(-x) - betaln(a1, b1)
         cdf2 = betainc(a2, b2, x)
         return float(np.dot(w, np.exp(log_pdf1) * cdf2))
 
