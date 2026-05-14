@@ -25,7 +25,8 @@ Please check out our [Getting Started](https://avoss84.github.io/bayesProp/getti
 - **Posterior predictive checks** — assess model fit by comparing observed data to data simulated from the posterior
 - **Bayes Factor Design Analysis (BFDA)** — plan sample sizes to reach a target level of evidence *before* running the experiment
 - **Sequential / streaming design** — update the posterior batch-by-batch as data arrive and stop early once the Bayes factor crosses an upper or lower threshold (`SequentialNonPairedBayesPropTest`, `SequentialPairedBayesPropTest`)
-- **Publication-ready plots** — posterior distributions, predictive checks, Savage–Dickey density-ratio plots, BFDA power curves, and sequential BF₁₀ trajectories out of the box
+- **Operating-characteristic analysis** — *calibrated-Bayes* frequentist evaluation of the chosen decision rule: three-way decision rates (`reject` / `accept` / `inconclusive`), Type-I sweep over the baseline rate, 95 % credible-interval coverage, and the sequential stopping-time distribution, with matched-α **Fisher's exact** (non-paired) or **McNemar exact** (paired) baselines overlaid. Pre-built Monte-Carlo harness in `bayesprop.utils.operation_characteristics` and `…_paired`, plus turnkey notebooks for both designs
+- **Publication-ready plots** — posterior distributions, predictive checks, Savage–Dickey density-ratio plots, BFDA power curves, sequential BF₁₀ trajectories, and OC diagnostic plots (with Wilson Monte-Carlo bands) out of the box
 
 ## Models
 
