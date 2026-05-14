@@ -85,9 +85,9 @@ nav:
       - Paired Model (Pólya-Gamma): guide/paired_pg.md
       - Paired Model (Bayesian Bootstrap): guide/paired_bootstrap.md
       - Decision Rules: guide/decision_rules.md
-      - Frequentist Evaluation (Non-Paired): guide/frequentist_evaluation.md
-      - Frequentist Evaluation (Paired): guide/frequentist_evaluation_paired.md
-      - Sample Size Planning (BFDA): guide/bfda.md
+      - Frequentist Evaluation (indep.): guide/frequentist_evaluation.md
+      - Frequentist Evaluation (dep.): guide/frequentist_evaluation_paired.md
+      - Sample Size Planning: guide/bfda.md
   - API Reference:
       - Overview: api/index.md
       - Data Schemas: api/data_schemas.md
