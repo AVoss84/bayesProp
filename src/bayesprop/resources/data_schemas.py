@@ -81,6 +81,31 @@ class PPCStatistic(BaseModel):
     )
 
 
+class FrequentistTestResult(BaseModel):
+    """Result of a frequentist two-proportion test (e.g. Fisher's exact)."""
+
+    p_value: float = Field(
+        ..., ge=0, le=1, description="Two-sided p-value under H0: p_A = p_B."
+    )
+    odds_ratio: float | None = Field(
+        ...,
+        description=(
+            "Sample odds ratio (p_A/(1-p_A)) / (p_B/(1-p_B)); "
+            "``None`` if any cell is zero."
+        ),
+    )
+    successes_A: int = Field(..., ge=0, description="Successes in group A.")
+    successes_B: int = Field(..., ge=0, description="Successes in group B.")
+    n_A: int = Field(..., ge=0, description="Sample size of group A.")
+    n_B: int = Field(..., ge=0, description="Sample size of group B.")
+    alternative: Literal["two-sided", "greater", "less"] = Field(
+        default="two-sided", description="Alternative hypothesis used."
+    )
+    test: str = Field(
+        default="fisher_exact", description="Identifier of the test that was run."
+    )
+
+
 # ====================================================================== #
 #  Simulation result schemas
 # ====================================================================== #

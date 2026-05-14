@@ -60,6 +60,13 @@ null** criterion $P(H_0 \mid D) < \alpha$ as the decisiveness condition,
 which can be more intuitive for practitioners who think in terms of
 posterior probabilities rather than evidence ratios.
 
+!!! tip "After choosing `n`, verify the procedure"
+    BFDA picks `n` to hit a target *power*. To check that the resulting
+    decision rule is also well-calibrated across the parameter space —
+    three-way OC curves, Type-I sweeps, CI coverage, sequential ESS,
+    matched-α Fisher baselines — see the
+    [Frequentist Evaluation guide](frequentist_evaluation.md).
+
 ## Non-paired design
 
 ```python

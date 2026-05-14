@@ -13,6 +13,7 @@ from source code docstrings.
 | [Paired Model (Pólya-Gamma)](bayes_paired_pg.md) | Paired logistic model with PG Gibbs sampler |
 | [Sequential designs](sequential.md) | Warm-started sequential variants of the non-paired and paired-Laplace models |
 | [Utilities](bfda_utils.md) | BFDA, simulation & sample-size planning |
+| [Operating Characteristics](operation_characteristics.md) | Monte-Carlo OC simulation harness (fixed-n + sequential) |
 
 ## Shared decision-rule interface
 

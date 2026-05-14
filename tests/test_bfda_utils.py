@@ -13,6 +13,7 @@ from bayesprop.utils.utils import (
     bfda_power_curve,
     bfda_simulate,
     find_n_for_power,
+    fisher_exact_nonpaired_test,
     plot_bfda_power,
     plot_bfda_sensitivity,
 )
@@ -135,6 +136,53 @@ class TestBfdaPowerCurvePh0:
                 n_sim=5,
                 design="invalid",
             )
+
+
+# ── fisher_exact_nonpaired_test ──────────────────────────────
+
+
+class TestFisherExactNonpaired:
+    """Tests for the Fisher exact frequentist baseline."""
+
+    def test_clear_effect_rejects(self) -> None:
+        rng = np.random.default_rng(0)
+        y_A = rng.binomial(1, 0.85, 300).astype(float)
+        y_B = rng.binomial(1, 0.55, 300).astype(float)
+        result = fisher_exact_nonpaired_test(y_A, y_B)
+        assert result.p_value < 1e-6
+        assert result.odds_ratio is not None and result.odds_ratio > 1.0
+        assert result.n_A == 300 and result.n_B == 300
+        assert result.test == "fisher_exact"
+
+    def test_null_is_uniform_in_p_value(self) -> None:
+        """Under H0 the p-values should be (approximately) uniform on (0, 1]."""
+        rng = np.random.default_rng(1)
+        n_sim = 400
+        p_values = np.empty(n_sim)
+        for i in range(n_sim):
+            y_A = rng.binomial(1, 0.5, 200).astype(float)
+            y_B = rng.binomial(1, 0.5, 200).astype(float)
+            p_values[i] = fisher_exact_nonpaired_test(y_A, y_B).p_value
+        # Fisher is discrete/conservative so we only check the bound.
+        assert (p_values < 0.05).mean() <= 0.07
+
+    def test_alternative_arguments(self) -> None:
+        rng = np.random.default_rng(2)
+        y_A = rng.binomial(1, 0.8, 200).astype(float)
+        y_B = rng.binomial(1, 0.5, 200).astype(float)
+        two_sided = fisher_exact_nonpaired_test(y_A, y_B, alternative="two-sided")
+        greater = fisher_exact_nonpaired_test(y_A, y_B, alternative="greater")
+        less = fisher_exact_nonpaired_test(y_A, y_B, alternative="less")
+        assert two_sided.alternative == "two-sided"
+        assert greater.p_value < two_sided.p_value
+        assert less.p_value > 0.5
+
+    def test_rejects_non_binary_input(self) -> None:
+        rng = np.random.default_rng(3)
+        y_A = rng.uniform(0, 1, 100)
+        y_B = rng.binomial(1, 0.5, 100).astype(float)
+        with pytest.raises(ValueError, match="0/1"):
+            fisher_exact_nonpaired_test(y_A, y_B)
 
 
 # ── find_n_for_power ─────────────────────────────────────────

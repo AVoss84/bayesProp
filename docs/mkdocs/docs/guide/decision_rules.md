@@ -90,6 +90,35 @@ print(f"BF₁₀ = {bf.BF_10:.2f}")
 print(f"Decision: {bf.decision}")
 ```
 
+### Three-way classification: `classify_bf`
+
+`bf.decision` is a verbose human-readable string ("Strong evidence
+against H₀"). For programmatic use — sequential stopping rules,
+Bayes-factor design analysis, operating-characteristic simulations —
+you usually want a coarse three-way category with **configurable**
+thresholds. The module-level helper `classify_bf` provides exactly
+that and is the single source of truth shared by
+`SequentialNonPairedBayesPropTest` and any external BFDA / OC tooling:
+
+```python
+from bayesprop.resources.bayes_nonpaired import classify_bf
+
+bf = model.savage_dickey_test()
+category = classify_bf(bf.BF_10, bf_upper=3.0, bf_lower=1.0 / 3.0)
+# → one of "reject", "accept", "inconclusive"
+```
+
+| Condition | Returned category |
+|-----------|-------------------|
+| \(BF_{10} \geq\) `bf_upper` | `"reject"` |
+| \(BF_{10} \leq\) `bf_lower` | `"accept"` |
+| Otherwise | `"inconclusive"` |
+
+Use Jeffreys' (1961) cutoffs for `bf_upper` to pick a strictness level:
+3 (moderate), 10 (strong), 30 (very strong), 100 (decisive). For a
+symmetric rule use `bf_lower = 1 / bf_upper`. Changing these in one
+place propagates to the sequential test's stopping rule as well.
+
 ## Framework 2: Posterior Probability of \(H_0\)
 
 ### Spike-and-slab prior

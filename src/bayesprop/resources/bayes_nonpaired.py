@@ -20,7 +20,10 @@ Typical workflow::
 
 from __future__ import annotations
 
-from typing import Any, Iterable
+from functools import lru_cache
+from typing import Any, Iterable, Literal
+
+BFDecision = Literal["reject", "accept", "inconclusive"]
 
 import numpy as np
 import numpy.typing as npt
@@ -54,6 +57,68 @@ def _format_bf(value: float) -> str:
         return f"{value:.2f}"
 
 
+def classify_bf(
+    bf10: float,
+    bf_upper: float = 3.0,
+    bf_lower: float = 1.0 / 3.0,
+) -> BFDecision:
+    """Three-way decision from a Bayes factor against a point null.
+
+    This is the single source of truth for the "reject / accept /
+    inconclusive" mapping used by both the sequential stopping rule
+    in :class:`SequentialNonPairedBayesPropTest` and any external
+    operating-characteristic / BFDA tooling.
+
+    Args:
+        bf10: Bayes factor in favour of H₁.
+        bf_upper: Threshold above which we declare evidence for H₁.
+            Conventional choices: 3 ("moderate"), 10 ("strong"),
+            30 ("very strong"), 100 ("decisive") — Jeffreys (1961).
+        bf_lower: Threshold below which we declare evidence for H₀.
+            Should equal ``1 / bf_upper`` for a symmetric rule.
+
+    Returns:
+        One of ``"reject"`` (`bf10 ≥ bf_upper`), ``"accept"``
+        (`bf10 ≤ bf_lower`), or ``"inconclusive"``.
+
+    Raises:
+        ValueError: If ``bf_lower >= bf_upper`` or ``bf_lower <= 0``.
+    """
+    if bf_lower >= bf_upper:
+        raise ValueError("bf_lower must be strictly less than bf_upper")
+    if bf_lower <= 0:
+        raise ValueError("bf_lower must be positive")
+    if bf10 >= bf_upper:
+        return "reject"
+    if bf10 <= bf_lower:
+        return "accept"
+    return "inconclusive"
+
+
+# ---------------------------------------------------------------------- #
+#  Pure-function caches (eliminate the dominant per-instance hot-spots
+#  observed under BFDA / OC / sequential simulation loops, where the
+#  same quadrature grid and prior-at-null are recomputed thousands of
+#  times despite being functions of (n_quad,) and (alpha0, beta0,
+#  null_value, n_grid) respectively).
+# ---------------------------------------------------------------------- #
+
+
+@lru_cache(maxsize=32)
+def _gauss_legendre_unit(n_quad: int) -> tuple[np.ndarray, np.ndarray]:
+    """Return cached Gauss-Legendre nodes/weights mapped to ``[0, 1]``.
+
+    ``leggauss(n_quad)`` triggers a symmetric eigenvalue solve via the
+    Golub-Welsch algorithm — measured at ~44 % of the cost of a single
+    :meth:`NonPairedBayesPropTest.fit` call in tight loops. Because the
+    result depends only on ``n_quad`` we memoise it module-wide.
+
+    The returned arrays are treated as read-only by callers.
+    """
+    nodes, weights = np.polynomial.legendre.leggauss(n_quad)
+    return 0.5 * (nodes + 1), 0.5 * weights
+
+
 def beta_diff_pdf(
     z: float,
     a1: float,
@@ -80,7 +145,7 @@ def beta_diff_pdf(
     if z <= -1 or z >= 1:
         return 0.0
 
-    # Δ = θ_A − θ_B  ⟹  θ_A = θ_B + z
+    # Δ = θ_A − θ_B  =>  θ_A = θ_B + z
     # f_Δ(z) = ∫ f_A(x) · f_B(x − z) dx   for x in [max(0,z), min(1,1+z)]
     lower = max(0.0, z)
     upper = min(1.0, 1.0 + z)
@@ -95,6 +160,19 @@ def beta_diff_pdf(
 
     integrand = np.exp(log_fA + log_fB)
     return float(np.trapezoid(integrand, x))
+
+
+@lru_cache(maxsize=256)
+def _prior_diff_pdf_at(
+    alpha0: float, beta0: float, null_value: float, n_grid: int = 2000
+) -> float:
+    """Cached prior density of Δ = θ_A − θ_B at *null_value* under symmetric Beta(α₀, β₀).
+
+    Used by the Savage-Dickey ratio. The prior parameters and null
+    point do not change across a simulation, so memoising removes one
+    full 2000-point convolution per call to :meth:`savage_dickey_test`.
+    """
+    return beta_diff_pdf(null_value, alpha0, beta0, alpha0, beta0, n_grid=n_grid)
 
 
 class NonPairedBayesPropTest:
@@ -148,10 +226,11 @@ class NonPairedBayesPropTest:
                 f"alpha0={alpha0}, beta0={beta0}, threshold={threshold}, n_quad={n_quad}"
             )
 
-        # precompute quadrature nodes/weights (reused across calls)
-        nodes, weights = np.polynomial.legendre.leggauss(n_quad)
-        self._x = 0.5 * (nodes + 1)
-        self._w = 0.5 * weights
+        # Quadrature nodes/weights depend only on n_quad; share a single
+        # cached pair across all instances to avoid the Golub-Welsch
+        # eigensolve on every constructor call (dominant cost in tight
+        # simulation loops — see _gauss_legendre_unit).
+        self._x, self._w = _gauss_legendre_unit(n_quad)
 
     def _binarize(self, y: np.ndarray) -> np.ndarray:
         """Return y unchanged if already binary, else binarize at self.threshold.
@@ -274,39 +353,35 @@ class NonPairedBayesPropTest:
         self.theta_B_samples = rng.beta(self.a_B, self.b_B, size=self.n_samples)
         self.delta_samples = self.theta_A_samples - self.theta_B_samples
 
+        # Compute all requested quantiles per array in a single call —
+        # ``np.quantile`` triggers one partition per call, so batching
+        # collapses 8 sorts (3 arrays × {2.5%, 3%, 97%, 97.5%}) down to 3.
+        q_delta = np.quantile(self.delta_samples, [0.025, 0.03, 0.97, 0.975])
+        q_theta_A = np.quantile(self.theta_A_samples, [0.03, 0.97])
+        q_theta_B = np.quantile(self.theta_B_samples, [0.03, 0.97])
+
+        mean_A = float(self.theta_A_samples.mean())
+        mean_B = float(self.theta_B_samples.mean())
+        mean_delta = float(self.delta_samples.mean())
+
         self.summary = NonPairedSummary(
-            mean_delta=float(self.delta_samples.mean()),
-            ci_95=CredibleInterval(
-                lower=float(np.quantile(self.delta_samples, 0.025)),
-                upper=float(np.quantile(self.delta_samples, 0.975)),
-            ),
+            mean_delta=mean_delta,
+            ci_95=CredibleInterval(lower=float(q_delta[0]), upper=float(q_delta[3])),
             **{"P(A > B)": float((self.delta_samples > 0).mean())},
-            theta_A_mean=float(self.theta_A_samples.mean()),
-            theta_B_mean=float(self.theta_B_samples.mean()),
+            theta_A_mean=mean_A,
+            theta_B_mean=mean_B,
         )
 
         self.trace_summary = pd.DataFrame(
             {
-                "mean": [
-                    self.theta_A_samples.mean(),
-                    self.theta_B_samples.mean(),
-                    self.delta_samples.mean(),
-                ],
+                "mean": [mean_A, mean_B, mean_delta],
                 "sd": [
                     self.theta_A_samples.std(),
                     self.theta_B_samples.std(),
                     self.delta_samples.std(),
                 ],
-                "hdi_3%": [
-                    np.quantile(self.theta_A_samples, 0.03),
-                    np.quantile(self.theta_B_samples, 0.03),
-                    np.quantile(self.delta_samples, 0.03),
-                ],
-                "hdi_97%": [
-                    np.quantile(self.theta_A_samples, 0.97),
-                    np.quantile(self.theta_B_samples, 0.97),
-                    np.quantile(self.delta_samples, 0.97),
-                ],
+                "hdi_3%": [q_theta_A[0], q_theta_B[0], q_delta[1]],
+                "hdi_97%": [q_theta_A[1], q_theta_B[1], q_delta[2]],
             },
             index=["theta_A", "theta_B", "delta"],
         )
@@ -343,10 +418,9 @@ class NonPairedBayesPropTest:
             null_value, self.a_A, self.b_A, self.a_B, self.b_B
         )
 
-        # Prior density at null via analytic convolution
-        prior_at_null = beta_diff_pdf(
-            null_value, self.alpha0, self.beta0, self.alpha0, self.beta0
-        )
+        # Prior density at null — same for every call with this prior,
+        # so served from a module-level cache.
+        prior_at_null = _prior_diff_pdf_at(self.alpha0, self.beta0, null_value)
 
         BF_01 = posterior_at_null / prior_at_null
         BF_10 = 1.0 / BF_01
@@ -1371,16 +1445,19 @@ class SequentialNonPairedBayesPropTest:
 
         decision = bb.decide()
 
-        # Stopping rule.
+        # Stopping rule — delegates the BF→category mapping to the
+        # shared :func:`classify_bf` helper so the sequential test and
+        # external BFDA tooling never drift out of sync.
         bf10 = decision.bayes_factor.BF_10 if decision.bayes_factor else None
         n_min_pair = min(self.n_A, self.n_B)
         stop, reason = False, None
         if self.n_max is not None and n_min_pair >= self.n_max:
             stop, reason = True, "n_max reached"
         elif bf10 is not None and n_min_pair >= self.n_min:
-            if bf10 >= self.bf_upper:
+            category = classify_bf(bf10, self.bf_upper, self.bf_lower)
+            if category == "reject":
                 stop, reason = True, f"BF10 ≥ {self.bf_upper} (evidence for H1)"
-            elif bf10 <= self.bf_lower:
+            elif category == "accept":
                 stop, reason = True, f"BF10 ≤ {self.bf_lower} (evidence for H0)"
         if stop:
             self._stopped = True

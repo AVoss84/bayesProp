@@ -1,15 +1,18 @@
 from __future__ import annotations
 
-from typing import Any, Callable
+from typing import Any, Callable, Literal
 
 import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
 from scipy.interpolate import interp1d
 
+from scipy.stats import fisher_exact
+
 from bayesprop.resources.bayes_nonpaired import beta_diff_pdf
 from bayesprop.resources.data_schemas import (
     DecisionRuleType,
+    FrequentistTestResult,
     NonPairedSimResult,
     NonPairedTrueParams,
     PairedSimResult,
@@ -109,6 +112,81 @@ def simulate_paired_scores(
 def _sigmoid(x: npt.ArrayLike) -> np.ndarray:
     """Element-wise sigmoid (logistic) function."""
     return 1.0 / (1.0 + np.exp(-x))
+
+
+# ======================================================================
+#  Frequentist baselines
+# ======================================================================
+
+
+def fisher_exact_nonpaired_test(
+    y_A: npt.ArrayLike,
+    y_B: npt.ArrayLike,
+    *,
+    alternative: Literal["two-sided", "greater", "less"] = "two-sided",
+) -> FrequentistTestResult:
+    """Fisher's exact test for two independent proportions.
+
+    Frequentist baseline that mirrors the data contract of
+    :class:`bayesprop.resources.bayes_nonpaired.NonPairedBayesPropTest`
+    but returns a classical p-value instead of a Bayes factor. Useful
+    as a calibration reference for operating-characteristic /
+    Bayes-factor design analyses (e.g. overlaying a frequentist power
+    curve onto the Bayesian three-way OC plot).
+
+    The test is exact under H₀: ``p_A = p_B`` (no large-sample
+    approximation), so it remains valid at small ``n`` and at boundary
+    success rates ``p`` near 0 or 1, where the Wald Z and Pearson
+    chi-squared tests are unreliable.
+
+    Args:
+        y_A: Binary outcomes (0/1) for group A. Non-binary inputs are
+            rejected — binarise upstream if your scores are continuous.
+        y_B: Binary outcomes (0/1) for group B.
+        alternative: ``"two-sided"`` tests ``p_A ≠ p_B``;
+            ``"greater"`` tests ``p_A > p_B``; ``"less"`` tests
+            ``p_A < p_B``.
+
+    Returns:
+        :class:`FrequentistTestResult` with the p-value, sample odds
+        ratio, and cell counts.
+
+    Raises:
+        ValueError: If either array contains values outside ``{0, 1}``.
+    """
+    arr_A = np.asarray(y_A, dtype=float)
+    arr_B = np.asarray(y_B, dtype=float)
+    for name, arr in (("y_A", arr_A), ("y_B", arr_B)):
+        if arr.size and not np.all((arr == 0.0) | (arr == 1.0)):
+            raise ValueError(
+                f"{name} must contain only 0/1 values; got non-binary entries"
+            )
+
+    n_A = int(arr_A.size)
+    n_B = int(arr_B.size)
+    sA = int(arr_A.sum())
+    sB = int(arr_B.sum())
+
+    # 2x2 contingency table:
+    #               success   failure
+    #   group A:      sA      n_A - sA
+    #   group B:      sB      n_B - sB
+    table = np.array([[sA, n_A - sA], [sB, n_B - sB]], dtype=int)
+    odds_ratio_raw, p_value = fisher_exact(table, alternative=alternative)
+    odds_ratio: float | None = (
+        float(odds_ratio_raw) if np.isfinite(odds_ratio_raw) else None
+    )
+
+    return FrequentistTestResult(
+        p_value=float(p_value),
+        odds_ratio=odds_ratio,
+        successes_A=sA,
+        successes_B=sB,
+        n_A=n_A,
+        n_B=n_B,
+        alternative=alternative,
+        test="fisher_exact",
+    )
 
 
 # ======================================================================
