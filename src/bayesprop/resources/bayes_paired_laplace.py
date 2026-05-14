@@ -309,12 +309,16 @@ class PairedBayesPropTest:
         self.delta_A_samples = delta_A_s
         self.delta_samples = Delta_s
 
+        # Batch all quantile calls per array — np.quantile shares a single
+        # internal partition() across requested probabilities, so this cuts
+        # six independent O(n log n) sorts down to three.
+        delta_lo, delta_hi = np.quantile(Delta_s, [0.025, 0.975])
+        dA_lo, dA_hi = np.quantile(delta_A_s, [0.03, 0.97])
+        mu_lo, mu_hi = np.quantile(mu_s, [0.03, 0.97])
+
         self.summary = PairedSummary(
             mean_delta=float(Delta_s.mean()),
-            ci_95=CredibleInterval(
-                lower=float(np.quantile(Delta_s, 0.025)),
-                upper=float(np.quantile(Delta_s, 0.975)),
-            ),
+            ci_95=CredibleInterval(lower=float(delta_lo), upper=float(delta_hi)),
             **{"P(A > B)": float((Delta_s > 0).mean())},
             delta_A_posterior_mean=float(delta_A_s.mean()),
         )
@@ -323,14 +327,8 @@ class PairedBayesPropTest:
             {
                 "mean": [delta_A_s.mean(), mu_s.mean()],
                 "sd": [delta_A_s.std(), mu_s.std()],
-                "hdi_3%": [
-                    np.quantile(delta_A_s, 0.03),
-                    np.quantile(mu_s, 0.03),
-                ],
-                "hdi_97%": [
-                    np.quantile(delta_A_s, 0.97),
-                    np.quantile(mu_s, 0.97),
-                ],
+                "hdi_3%": [dA_lo, mu_lo],
+                "hdi_97%": [dA_hi, mu_hi],
                 "MAP": [delta_map, mu_map],
             },
             index=["delta_A", "mu"],
@@ -363,6 +361,21 @@ class PairedBayesPropTest:
     def savage_dickey_test(self, null_value: float = 0.0) -> SavageDickeyResult:
         """Savage-Dickey density-ratio Bayes factor for H0: delta_A = *null_value*.
 
+        Uses the *analytical* marginal of the Laplace posterior: the
+        joint posterior on ``(μ, δ_A)`` is by construction Gaussian
+        with mean ``theta_map`` and covariance ``cov``, so the marginal
+        on ``δ_A`` is exactly ``N(δ_A_MAP, cov[1, 1])``. We evaluate
+        the density at ``null_value`` from this closed form rather
+        than re-estimating it via Gaussian-KDE on samples drawn from
+        the same Gaussian — the closed form is faster, exact, and
+        free of KDE bandwidth-quantisation noise (the latter being
+        especially relevant for the BF tail behaviour at small
+        ``|null_value − δ_A_MAP| / √cov[1,1]``).
+
+        The prior on ``δ_A`` is ``N(0, prior_sigma_delta²)``, so the
+        prior density at ``null_value`` is also computed in closed
+        form rather than dispatching through ``scipy.stats.norm.pdf``.
+
         Args:
             null_value: The point null hypothesis value for delta_A.
 
@@ -372,9 +385,17 @@ class PairedBayesPropTest:
         """
         self._check_fitted()
 
-        kde = gaussian_kde(self.delta_A_samples)
-        posterior_at_null = float(kde(null_value)[0])
-        prior_at_null = float(norm.pdf(null_value, 0, self.prior_sigma_delta))
+        # Marginal Laplace posterior on δ_A is exactly Gaussian.
+        delta_A_map = float(self.laplace["map"][1])
+        sigma_post = float(np.sqrt(self.laplace["cov"][1, 1]))
+        z = (null_value - delta_A_map) / sigma_post
+        posterior_at_null = float(
+            np.exp(-0.5 * z * z) / (sigma_post * np.sqrt(2.0 * np.pi))
+        )
+        prior_at_null = float(
+            np.exp(-0.5 * (null_value / self.prior_sigma_delta) ** 2)
+            / (self.prior_sigma_delta * np.sqrt(2.0 * np.pi))
+        )
 
         BF_01 = posterior_at_null / prior_at_null
         BF_10 = 1.0 / BF_01 if BF_01 > 0 else float("inf")
@@ -940,8 +961,14 @@ class PairedBayesPropTest:
         # Right: BF_10 vs slab width sigma_s
         ax2 = axes[1]
         sigma_grid = np.linspace(0.25, 5.0, 100)
-        kde = gaussian_kde(self.delta_A_samples)
-        post_at_0 = float(kde(0.0)[0])
+        # Analytical posterior density at 0 (Laplace marginal on δ_A is
+        # exactly Gaussian), matching savage_dickey_test's closed form.
+        sigma_post = float(np.sqrt(self.laplace["cov"][1, 1]))
+        delta_A_map = float(self.laplace["map"][1])
+        post_at_0 = float(
+            np.exp(-0.5 * (delta_A_map / sigma_post) ** 2)
+            / (sigma_post * np.sqrt(2.0 * np.pi))
+        )
         bf10_vals = [norm.pdf(0, 0, s) / post_at_0 for s in sigma_grid]
         ax2.plot(sigma_grid, bf10_vals, linewidth=2)
         ax2.axhline(

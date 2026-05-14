@@ -11,7 +11,9 @@ Little 2006).
 This page is about evaluating the chosen procedure *after* you've
 fixed its parameters. For the complementary question — *how do I pick
 the sample size in the first place?* — see
-[BFDA](bfda.md).
+[BFDA](bfda.md). For the paired analogue (Laplace approximation +
+McNemar baseline) see
+[Frequentist Evaluation — Paired Laplace](frequentist_evaluation_paired.md).
 
 ## What to estimate
 

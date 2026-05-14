@@ -14,6 +14,7 @@ from bayesprop.utils.utils import (
     bfda_simulate,
     find_n_for_power,
     fisher_exact_nonpaired_test,
+    mcnemar_paired_test,
     plot_bfda_power,
     plot_bfda_sensitivity,
 )
@@ -183,6 +184,61 @@ class TestFisherExactNonpaired:
         y_B = rng.binomial(1, 0.5, 100).astype(float)
         with pytest.raises(ValueError, match="0/1"):
             fisher_exact_nonpaired_test(y_A, y_B)
+
+
+# ── mcnemar_paired_test ──────────────────────────────────────
+
+
+class TestMcnemarPaired:
+    """Tests for McNemar's exact / chi² paired test."""
+
+    def test_detects_clear_effect(self) -> None:
+        # Heavy imbalance toward A succeeding when B fails — should
+        # reject H_0 with a small p-value.
+        y_A = np.array([1] * 20 + [0] * 5 + [1] * 5 + [0] * 70)
+        y_B = np.array([0] * 20 + [1] * 5 + [1] * 5 + [0] * 70)
+        result = mcnemar_paired_test(y_A, y_B)
+        assert result.p_value < 0.01
+        assert result.test == "mcnemar_exact"
+        assert result.odds_ratio == 4.0  # b/c = 20/5
+
+    def test_null_distribution_uniform_ish(self) -> None:
+        # Under H_0 the p-value distribution should be roughly Uniform.
+        rng = np.random.default_rng(1)
+        n_reps = 100
+        p_values = np.empty(n_reps)
+        for i in range(n_reps):
+            y_A = rng.binomial(1, 0.4, 200)
+            y_B = rng.binomial(1, 0.4, 200)
+            p_values[i] = mcnemar_paired_test(y_A, y_B).p_value
+        assert 0.02 < float(np.mean(p_values < 0.05)) < 0.20
+
+    def test_alternative_argument_split(self) -> None:
+        y_A = np.array([1] * 15 + [0] * 5 + [0] * 80)
+        y_B = np.array([0] * 15 + [1] * 5 + [0] * 80)
+        two = mcnemar_paired_test(y_A, y_B, alternative="two-sided").p_value
+        greater = mcnemar_paired_test(y_A, y_B, alternative="greater").p_value
+        less = mcnemar_paired_test(y_A, y_B, alternative="less").p_value
+        # b > c so "greater" should reject more strongly than "less".
+        assert greater < less
+        # Two-sided is bounded by twice the smaller one-sided.
+        assert two <= 2.0 * min(greater, less) + 1e-12
+
+    def test_no_discordant_pairs_returns_one(self) -> None:
+        y = np.array([1, 0, 1, 0, 1, 0])
+        # All concordant -> no information; p must be 1.
+        assert mcnemar_paired_test(y, y).p_value == 1.0
+
+    def test_rejects_shape_mismatch(self) -> None:
+        with pytest.raises(ValueError, match="same length"):
+            mcnemar_paired_test([0, 1, 0], [0, 1])
+
+    def test_rejects_non_binary_input(self) -> None:
+        rng = np.random.default_rng(2)
+        y_A = rng.uniform(0, 1, 50)
+        y_B = rng.binomial(1, 0.5, 50).astype(float)
+        with pytest.raises(ValueError, match="0/1"):
+            mcnemar_paired_test(y_A, y_B)
 
 
 # ── find_n_for_power ─────────────────────────────────────────

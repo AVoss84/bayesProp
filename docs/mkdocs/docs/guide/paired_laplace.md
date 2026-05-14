@@ -249,25 +249,23 @@ model.plot_sensitivity(prior_H0=0.5)
 
 ## Frequentist comparison (McNemar test)
 
-For reference, you can compare the Bayesian result with McNemar's test on
-the same binarized paired data:
+For reference, you can compare the Bayesian result with McNemar's
+exact test on the same paired binary data. The library ships a small
+wrapper that returns a standardised
+[`FrequentistTestResult`](../api/data_schemas.md):
 
 ```python
-from scipy.stats import chi2
-import math
+from bayesprop.utils.utils import mcnemar_paired_test
 
-y_A = model.y_A_obs
-y_B = model.y_B_obs
-
-b = np.sum((y_A == 1) & (y_B == 0))  # A perfect, B not
-c = np.sum((y_A == 0) & (y_B == 1))  # B perfect, A not
-
-if b + c > 0:
-    chi2_stat = (b - c) ** 2 / (b + c)
-    p_val = 1 - chi2.cdf(chi2_stat, df=1)
-    print(f"Discordant pairs: A>B={b}, B>A={c}")
-    print(f"McNemar χ² = {chi2_stat:.2f}, p = {p_val:.4f}")
+freq = mcnemar_paired_test(model.y_A_obs, model.y_B_obs)
+print(f"McNemar p = {freq.p_value:.4f},  discordant OR = {freq.odds_ratio}")
 ```
+
+For a *systematic* Monte-Carlo evaluation of the paired Bayes rule's
+operating characteristics (Type-I rate, three-way decision curves,
+CI coverage, sequential stopping-time distribution) with a matched-α
+McNemar baseline overlay, see
+[Frequentist Evaluation — Paired Laplace](frequentist_evaluation_paired.md).
 
 ## BFDA sample-size planning
 

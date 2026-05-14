@@ -7,7 +7,7 @@ import numpy as np
 import numpy.typing as npt
 from scipy.interpolate import interp1d
 
-from scipy.stats import fisher_exact
+from scipy.stats import binomtest, fisher_exact
 
 from bayesprop.resources.bayes_nonpaired import beta_diff_pdf
 from bayesprop.resources.data_schemas import (
@@ -186,6 +186,129 @@ def fisher_exact_nonpaired_test(
         n_B=n_B,
         alternative=alternative,
         test="fisher_exact",
+    )
+
+
+def mcnemar_paired_test(
+    y_A: npt.ArrayLike,
+    y_B: npt.ArrayLike,
+    *,
+    alternative: Literal["two-sided", "greater", "less"] = "two-sided",
+    exact: bool | None = None,
+) -> FrequentistTestResult:
+    """McNemar's test for two paired (matched) proportions.
+
+    Frequentist baseline that mirrors the data contract of
+    :class:`bayesprop.resources.bayes_paired_laplace.PairedBayesPropTest`
+    but returns a classical p-value instead of a Bayes factor. Useful
+    as a calibration reference for paired operating-characteristic /
+    Bayes-factor design analyses.
+
+    Given two binary arrays ``y_A`` and ``y_B`` of equal length, the
+    test conditions on the **discordant pairs**:
+
+    * ``b = #{i : y_A[i] = 1, y_B[i] = 0}``
+    * ``c = #{i : y_A[i] = 0, y_B[i] = 1}``
+
+    Under ``H_0: p_A = p_B`` and conditional on ``b + c``, ``b`` follows
+    ``Binomial(b + c, 0.5)``. The two-sided p-value is computed as
+    ``2 · min(P(B ≤ b), P(B ≥ b))`` clipped to ``[0, 1]`` from an
+    exact binomial calculation when ``b + c`` is small (default
+    threshold 25, matching :func:`scipy.stats.contingency.mcnemar`'s
+    convention), and from the standard chi-squared approximation
+    otherwise.
+
+    Args:
+        y_A: Binary outcomes (0/1) for arm A. Non-binary inputs raise.
+        y_B: Binary outcomes (0/1) for arm B. Must be the same length
+            as ``y_A`` (pairs are aligned by index).
+        alternative: ``"two-sided"`` tests ``p_A ≠ p_B``; ``"greater"``
+            tests ``p_A > p_B`` (one-sided on ``b``); ``"less"`` tests
+            ``p_A < p_B``.
+        exact: If ``True``, force the exact binomial p-value; if
+            ``False``, force the chi-squared approximation; if ``None``
+            (default), the exact test is used when ``b + c <= 25``.
+
+    Returns:
+        :class:`FrequentistTestResult` with the p-value, the discordant
+        odds ratio ``b / c`` (or ``None`` if ``c == 0``), and the
+        marginal counts.
+
+    Raises:
+        ValueError: If either array contains non-binary values or the
+            two arrays have different lengths.
+    """
+    arr_A = np.asarray(y_A, dtype=float)
+    arr_B = np.asarray(y_B, dtype=float)
+    if arr_A.shape != arr_B.shape:
+        raise ValueError(
+            f"y_A and y_B must have the same length for a paired test; "
+            f"got shapes {arr_A.shape} and {arr_B.shape}"
+        )
+    for name, arr in (("y_A", arr_A), ("y_B", arr_B)):
+        if arr.size and not np.all((arr == 0.0) | (arr == 1.0)):
+            raise ValueError(
+                f"{name} must contain only 0/1 values; got non-binary entries"
+            )
+
+    n = int(arr_A.size)
+    # Discordant pair counts. McNemar conditions on these and ignores
+    # the (a, d) cells (concordant pairs carry no information about the
+    # marginal-rate difference).
+    b = int(np.sum((arr_A == 1.0) & (arr_B == 0.0)))
+    c = int(np.sum((arr_A == 0.0) & (arr_B == 1.0)))
+    n_disc = b + c
+
+    # Default: exact for small discordant counts, chi² otherwise.
+    use_exact = exact if exact is not None else (n_disc <= 25)
+
+    if n_disc == 0:
+        # No information: by convention p = 1 (no evidence against H_0).
+        p_value = 1.0
+    elif use_exact:
+        # binomtest gives the appropriate p-value for each alternative.
+        # For McNemar, "greater" / "less" map to b being large / small
+        # under Binomial(b+c, 0.5).
+        bt = binomtest(
+            b,
+            n_disc,
+            p=0.5,
+            alternative=(
+                "two-sided"
+                if alternative == "two-sided"
+                else ("greater" if alternative == "greater" else "less")
+            ),
+        )
+        p_value = float(bt.pvalue)
+    else:
+        from scipy.stats import chi2
+
+        chi2_stat = (b - c) ** 2 / n_disc
+        p_two_sided = float(1.0 - chi2.cdf(chi2_stat, df=1))
+        if alternative == "two-sided":
+            p_value = p_two_sided
+        else:
+            # Split the two-sided p-value by direction of the observed
+            # imbalance; this is the standard one-sided McNemar.
+            half = 0.5 * p_two_sided
+            if (alternative == "greater" and b > c) or (
+                alternative == "less" and b < c
+            ):
+                p_value = half
+            else:
+                p_value = 1.0 - half
+
+    odds_ratio: float | None = float(b) / c if c > 0 else None
+
+    return FrequentistTestResult(
+        p_value=p_value,
+        odds_ratio=odds_ratio,
+        successes_A=int(arr_A.sum()),
+        successes_B=int(arr_B.sum()),
+        n_A=n,
+        n_B=n,
+        alternative=alternative,
+        test="mcnemar_exact" if use_exact else "mcnemar_chi2",
     )
 
 

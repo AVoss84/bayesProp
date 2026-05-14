@@ -80,6 +80,7 @@ nav:
       - Paired Model (Pólya-Gamma): guide/paired_pg.md
       - Decision Rules: guide/decision_rules.md
       - Frequentist Evaluation: guide/frequentist_evaluation.md
+      - Frequentist Evaluation (Paired): guide/frequentist_evaluation_paired.md
       - Sample Size Planning (BFDA): guide/bfda.md
   - API Reference:
       - Overview: api/index.md
@@ -90,3 +91,4 @@ nav:
       - Sequential designs: api/sequential.md
       - Utilities: api/bfda_utils.md
       - Operating Characteristics: api/operation_characteristics.md
+      - Operating Characteristics (Paired): api/operation_characteristics_paired.md
