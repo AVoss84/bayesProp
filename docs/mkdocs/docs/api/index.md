@@ -13,7 +13,7 @@ from source code docstrings.
 | [Paired Model (Pólya-Gamma)](bayes_paired_pg.md) | Paired logistic model with PG Gibbs sampler |
 | [Paired Model (Bayesian Bootstrap)](bayes_paired_bootstrap.md) | Nonparametric paired test via Dirichlet weights on the empirical distribution |
 | [Sequential designs](sequential.md) | Warm-started sequential variants of the non-paired and paired-Laplace models |
-| [Utilities](bfda_utils.md) | BFDA, simulation & sample-size planning |
+| [Utilities](bfda_utils.md) | DGPs, frequentist baselines, BFDA, decision helpers |
 | [Operating Characteristics](operation_characteristics.md) | Monte-Carlo OC simulation harness for the non-paired model (fixed-n + sequential) |
 | [Operating Characteristics (Paired)](operation_characteristics_paired.md) | Monte-Carlo OC simulation harness for the paired-Laplace model (fixed-n + sequential) |
 
