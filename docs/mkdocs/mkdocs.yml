@@ -97,6 +97,6 @@ nav:
       - Paired Model (Bayesian Bootstrap): api/bayes_paired_bootstrap.md
       - Sequential designs: api/sequential.md
       - Utilities: api/bfda_utils.md
-      - Operating Characteristics: api/operation_characteristics.md
-      - Operating Characteristics (Paired): api/operation_characteristics_paired.md
+      - Operating Characteristics (indep.): api/operation_characteristics.md
+      - Operating Characteristics (dep.): api/operation_characteristics_paired.md
   - Changelog: changelog.md
