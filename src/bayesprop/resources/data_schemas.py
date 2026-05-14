@@ -197,7 +197,7 @@ class NonPairedConfig(BaseModel):
     alpha0: float = Field(default=1.0, gt=0, description="Prior alpha for Beta.")
     beta0: float = Field(default=1.0, gt=0, description="Prior beta for Beta.")
     threshold: float = Field(
-        default=0.7, ge=0, le=1, description="Binarization threshold."
+        default=0.5, ge=0, le=1, description="Binarization threshold."
     )
     n_quad: int = Field(
         default=100, gt=0, description="Number of Gauss-Legendre quadrature nodes."

@@ -100,7 +100,7 @@ class TestNonPairedInit:
         model = NonPairedBayesPropTest()
         assert model.alpha0 == 1.0
         assert model.beta0 == 1.0
-        assert model.threshold == 0.7
+        assert model.threshold == 0.5
         assert model.n_samples == 20_000
 
     def test_custom_params(self) -> None:

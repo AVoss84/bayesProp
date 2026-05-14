@@ -20,7 +20,7 @@ Please check out our [Getting Started](https://avoss84.github.io/bayesProp/getti
 ## Features
 
 - **Effect-size inference for proportions** — estimate and test the difference in success rates for both **paired** and **non-paired** samples
-- **Savage–Dickey Bayes Factor** — test a point-null hypothesis ($\delta = 0$) without fitting a separate null model
+- **Savage–Dickey Bayes Factor** — test a point-null hypothesis ('treatment effect / difference is zero') without fitting a separate null model
 - **Posterior of the null & ROPE** — quantify the posterior mass inside a Region of Practical Equivalence for nuanced decisions beyond simple reject/accept
 - **Posterior predictive checks** — assess model fit by comparing observed data to data simulated from the posterior
 - **Bayes Factor Design Analysis (BFDA)** — plan sample sizes to reach a target level of evidence *before* running the experiment

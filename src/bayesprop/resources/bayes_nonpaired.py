@@ -12,7 +12,7 @@ Typical workflow::
 
     from ai_eval.resources.bayes_nonpaired import NonPairedBayesPropTest, descriptive_summary
 
-    bb = NonPairedBayesPropTest(threshold=0.7)
+    bb = NonPairedBayesPropTest(threshold=0.5)
     result = bb.test(scores_A, scores_B)
 
     df = descriptive_summary(scores_dict, thresholds=[0.5, 0.7, 0.8, 0.9, 0.95])
@@ -188,7 +188,7 @@ class NonPairedBayesPropTest:
         self,
         alpha0: float = 1.0,
         beta0: float = 1.0,
-        threshold: float = 0.7,
+        threshold: float = 0.5,
         n_quad: int = 100,
         seed: int = 0,
         n_samples: int = 20_000,
@@ -1169,7 +1169,7 @@ class SequentialNonPairedBayesPropTest:
         self,
         alpha0: float = 1.0,
         beta0: float = 1.0,
-        threshold: float = 0.7,
+        threshold: float = 0.5,
         bf_upper: float = 10.0,
         bf_lower: float = 0.1,
         n_max: int | None = None,

@@ -132,7 +132,7 @@ class TestNonPairedConfig:
         cfg = NonPairedConfig()
         assert cfg.alpha0 == 1.0
         assert cfg.beta0 == 1.0
-        assert cfg.threshold == 0.7
+        assert cfg.threshold == 0.5
         assert cfg.n_quad == 100
         assert cfg.seed == 0
         assert cfg.n_samples == 20_000
