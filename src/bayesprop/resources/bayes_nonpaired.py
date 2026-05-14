@@ -258,12 +258,12 @@ class NonPairedBayesPropTest:
 
         Computes:
 
-        .. math::
+        $$
+        P(\\theta_1 > \\theta_2) = \\int_0^1 f_{\\theta_1}(x) \\, F_{\\theta_2}(x) \\, dx
+        $$
 
-            P(\\theta_1 > \\theta_2) = \\int_0^1 f_{\\theta_1}(x) \\, F_{\\theta_2}(x) \\, dx
-
-        where :math:`f_{\\theta_1}` is the Beta(a1, b1) PDF and
-        :math:`F_{\\theta_2}` is the Beta(a2, b2) CDF (regularized
+        where $f_{\\theta_1}$ is the Beta(a1, b1) PDF and
+        $F_{\\theta_2}$ is the Beta(a2, b2) CDF (regularized
         incomplete Beta function).
 
         Uses ``np.log1p(-x)`` instead of ``np.log(1 - x)`` for improved
@@ -563,12 +563,12 @@ class NonPairedBayesPropTest:
         replicated datasets are drawn from the posterior predictive
         distribution and a two-sided ``mid-p`` value is computed as
 
-        .. math::
-
-            p = 2\\,\\min\\!\\bigl(P(T^{\\text{rep}} > T^{\\text{obs}})
-                + \\tfrac{1}{2} P(T^{\\text{rep}} = T^{\\text{obs}}),\\;
-                P(T^{\\text{rep}} < T^{\\text{obs}})
-                + \\tfrac{1}{2} P(T^{\\text{rep}} = T^{\\text{obs}})\\bigr).
+        $$
+        p = 2\\,\\min\\!\\bigl(P(T^{\\text{rep}} > T^{\\text{obs}})
+            + \\tfrac{1}{2} P(T^{\\text{rep}} = T^{\\text{obs}}),\\;
+            P(T^{\\text{rep}} < T^{\\text{obs}})
+            + \\tfrac{1}{2} P(T^{\\text{rep}} = T^{\\text{obs}})\\bigr).
+        $$
 
         The mid-p correction splits the probability mass at exact ties
         evenly between the two tails, which prevents the p-value from

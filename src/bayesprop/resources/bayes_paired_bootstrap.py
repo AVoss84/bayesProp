@@ -6,10 +6,11 @@ differences ``D_i = y_A_i - y_B_i ∈ {-1, 0, +1}`` and place a flat
 Dirichlet(1, …, 1) "prior" over the simplex of weights on the empirical
 distribution. Each posterior draw of the average treatment effect is
 
-.. math::
-
-    \\Delta^{(s)} = \\sum_{i=1}^n w_i^{(s)} D_i,
-    \\qquad \\mathbf{w}^{(s)} \\sim \\text{Dirichlet}(\\alpha,\\dots,\\alpha)
+$$
+\Delta^{(s)} = \sum_{i=1}^n w_i^{(s)} D_i,
+\qquad
+\mathbf{w}^{(s)} \sim \text{Dirichlet}(\alpha, \dots, \alpha)
+$$
 
 with ``α = 1`` the standard noninformative choice.
 
