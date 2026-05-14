@@ -35,6 +35,7 @@ Please check out our [Getting Started](https://avoss84.github.io/bayesProp/getti
 | **Non-paired Beta–Bernoulli** | `NonPairedBayesPropTest` | Conjugate Beta posteriors per arm; P(B>A) by quadrature, Δ summaries by Monte Carlo | Independent groups, exact & fast |
 | **Paired Logistic (Laplace)** | `PairedBayesPropTest` | MAP + Laplace approximation | Paired scores, large *n*, fast iteration |
 | **Paired Logistic (Pólya–Gamma)** | `PairedBayesPropTestPG` | Exact Gibbs sampling | Paired scores, small *n*, exact posterior |
+| **Paired Bayesian Bootstrap** | `PairedBayesPropTestBB` | Nonparametric — Dirichlet weights on the empirical distribution of paired differences | Paired scores, no prior elicitation, robustness to likelihood misspecification (ROPE-driven; no Savage–Dickey BF) |
 
 ## Quick start
 
@@ -102,6 +103,7 @@ source .venv/bin/activate
 - Gelman, A., Carlin, J. B., Stern, H. S., Dunson, D. B., Vehtari, A. & Rubin, D. B. (2013). *Bayesian Data Analysis* (3rd ed.). Chapman & Hall/CRC.
 - Kruschke, J. K. (2018). Rejecting or accepting parameter values in Bayesian estimation. *Advances in Methods and Practices in Psychological Science*, 1(2), 270–280.
 - Polson, N. G., Scott, J. G. & Windle, J. (2013). Bayesian inference for logistic models using Pólya–Gamma latent variables. *JASA*, 108(504), 1339–1349.
+- Rubin, D. B. (1981). The Bayesian Bootstrap. *The Annals of Statistics*, 9(1), 130–134.
 - Schönbrodt, F. D. & Wagenmakers, E.-J. (2018). Bayes factor design analysis: Planning for compelling evidence. *Psychonomic Bulletin & Review*, 25(1), 128–142.
 
 

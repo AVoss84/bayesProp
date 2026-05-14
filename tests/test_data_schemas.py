@@ -223,9 +223,9 @@ class TestPairedConfigs:
         cfg = PairedPGConfig()
         assert cfg.prior_sigma_delta == 1.0
         assert cfg.prior_sigma_mu == 2.0
-        assert cfg.n_iter == 2_000
-        assert cfg.burn_in == 500
-        assert cfg.n_chains == 4
+        assert cfg.n_iter == 1_000
+        assert cfg.burn_in == 200
+        assert cfg.n_chains == 2
 
     def test_pg_invalid_sigma(self) -> None:
         with pytest.raises(ValidationError):

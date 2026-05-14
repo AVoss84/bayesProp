@@ -299,12 +299,12 @@ class PairedPGConfig(BaseModel):
     )
     seed: int = Field(default=0, description="Random seed.")
     n_iter: int = Field(
-        default=2_000, gt=0, description="Total Gibbs iterations per chain."
+        default=1_000, gt=0, description="Total Gibbs iterations per chain."
     )
     burn_in: int = Field(
-        default=500, ge=0, description="Number of warm-up iterations to discard."
+        default=200, ge=0, description="Number of warm-up iterations to discard."
     )
-    n_chains: int = Field(default=4, gt=0, description="Number of MCMC chains.")
+    n_chains: int = Field(default=2, gt=0, description="Number of MCMC chains.")
 
 
 class MCMCParamDiagnostic(BaseModel):

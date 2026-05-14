@@ -110,9 +110,9 @@ class TestPairedPGInit:
         model = PairedBayesPropTestPG()
         assert model.prior_sigma_delta == 1.0
         assert model.prior_sigma_mu == 2.0
-        assert model.n_iter == 2000
-        assert model.burn_in == 500
-        assert model.n_chains == 4
+        assert model.n_iter == 1000
+        assert model.burn_in == 200
+        assert model.n_chains == 2
 
     def test_custom_params(self) -> None:
         model = PairedBayesPropTestPG(

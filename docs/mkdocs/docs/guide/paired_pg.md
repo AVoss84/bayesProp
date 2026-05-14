@@ -226,9 +226,9 @@ pg_model = PairedBayesPropTestPG(
     prior_sigma_delta=1.0,
     prior_sigma_mu=2.0,
     seed=42,
-    n_iter=2000,
-    burn_in=500,
-    n_chains=4,
+    n_iter=1000,    # default; conjugate Gibbs reaches R-hat ≈ 1.00 by ~200 iter
+    burn_in=200,    # default
+    n_chains=2,     # default; 2 chains are enough for an R-hat diagnostic
 ).fit(y_A, y_B)
 
 s = pg_model.summary

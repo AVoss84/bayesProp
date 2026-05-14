@@ -11,6 +11,7 @@ from source code docstrings.
 | [Non-Paired Model](bayes_nonpaired.md) | Independent Beta-Bernoulli A/B test |
 | [Paired Model (Laplace)](bayes_paired_laplace.md) | Paired logistic model with Laplace approximation |
 | [Paired Model (Pólya-Gamma)](bayes_paired_pg.md) | Paired logistic model with PG Gibbs sampler |
+| [Paired Model (Bayesian Bootstrap)](bayes_paired_bootstrap.md) | Nonparametric paired test via Dirichlet weights on the empirical distribution |
 | [Sequential designs](sequential.md) | Warm-started sequential variants of the non-paired and paired-Laplace models |
 | [Utilities](bfda_utils.md) | BFDA, simulation & sample-size planning |
 | [Operating Characteristics](operation_characteristics.md) | Monte-Carlo OC simulation harness for the non-paired model (fixed-n + sequential) |

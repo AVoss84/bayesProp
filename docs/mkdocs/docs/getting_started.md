@@ -82,7 +82,7 @@ For exact MCMC inference with convergence diagnostics:
 from bayesprop.resources.bayes_paired_pg import PairedBayesPropTestPG
 
 # Reuse paired data from above
-model = PairedBayesPropTestPG(seed=42, n_iter=2000, burn_in=500, n_chains=4)
+model = PairedBayesPropTestPG(seed=42)  # defaults: n_iter=1000, burn_in=200, n_chains=2
 model.fit(y_A, y_B)
 model.print_summary()
 
