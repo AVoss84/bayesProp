@@ -145,6 +145,19 @@ internally to keep peak memory below ~400 MB.
    Bayesian estimation. *Advances in Methods and Practices in
    Psychological Science*, 1(2), 270–280. (ROPE-based decision making.)
 
+## Inputs and binarisation
+
+`PairedBayesPropTestBB` accepts both already-binary `{0, 1}` inputs and
+continuous scores in `[0, 1]`. Continuous inputs are auto-binarised at a
+configurable `threshold` (default `0.5`):
+
+```python
+model = PairedBayesPropTestBB(threshold=0.5, verbose=True).fit(scores_A, scores_B)
+```
+
+Values strictly outside `[0, 1]` or `NaN` raise `ValueError` instead of
+being silently truncated.
+
 ## API
 
 See [API Reference — Paired Model (Bayesian Bootstrap)](../api/bayes_paired_bootstrap.md)

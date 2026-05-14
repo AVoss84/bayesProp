@@ -145,6 +145,40 @@ class TestPairedLaplaceFit:
         model = PairedBayesPropTest(seed=99, n_samples=5000).fit(y_a, y_b)
         assert model.summary.p_A_greater_B > 0.95
 
+    def test_binarises_continuous_input(self) -> None:
+        """Continuous scores in [0, 1] are binarised at threshold=0.5 and
+        the resulting fit must match an equivalent 0/1 fit byte-for-byte
+        (sufficient statistics are identical)."""
+        rng = np.random.default_rng(7)
+        scores_A = rng.uniform(0.0, 1.0, size=80)
+        scores_B = rng.uniform(0.0, 1.0, size=80)
+        y_a_bin = (scores_A >= 0.5).astype(int)
+        y_b_bin = (scores_B >= 0.5).astype(int)
+
+        m_cont = PairedBayesPropTest(seed=0, n_samples=2000).fit(scores_A, scores_B)
+        m_bin = PairedBayesPropTest(seed=0, n_samples=2000).fit(y_a_bin, y_b_bin)
+        # Sufficient statistics (and thus the entire fit) must coincide.
+        assert np.array_equal(m_cont.y_A_obs, m_bin.y_A_obs)
+        assert np.array_equal(m_cont.y_B_obs, m_bin.y_B_obs)
+        assert m_cont.summary.mean_delta == pytest.approx(m_bin.summary.mean_delta)
+
+    def test_rejects_out_of_range_input(self) -> None:
+        """Out-of-range inputs raise instead of being silently truncated."""
+        m = PairedBayesPropTest(n_samples=500)
+        with pytest.raises(ValueError, match=r"outside \[0, 1\]"):
+            m.fit(np.array([0.3, 1.5, 0.8]), np.array([0, 1, 0]))
+        with pytest.raises(ValueError, match=r"outside \[0, 1\]"):
+            m.fit(np.array([0.3, 0.5, 0.8]), np.array([-0.1, 1.0, 0.0]))
+
+    def test_custom_threshold(self) -> None:
+        """Non-default threshold shifts the resulting 0/1 representation."""
+        m = PairedBayesPropTest(threshold=0.8, n_samples=500).fit(
+            np.array([0.7, 0.9, 0.85, 0.6]),
+            np.array([0.1, 0.2, 0.1, 0.05]),
+        )
+        assert m.y_A_obs.tolist() == [0, 1, 1, 0]
+        assert m.y_B_obs.tolist() == [0, 0, 0, 0]
+
 
 class TestPairedLaplaceSavageDickey:
     """Tests for PairedBayesPropTest.savage_dickey_test()."""
@@ -521,10 +555,22 @@ class TestSequentialPaired:
         with pytest.raises(ValueError):
             SequentialPairedBayesPropTest(bf_lower=0.0)
 
-    def test_rejects_non_binary_input(self) -> None:
+    def test_rejects_out_of_range_input(self) -> None:
+        """Values outside [0, 1] must still raise; only in-range continuous
+        scores are auto-binarised."""
         seq = SequentialPairedBayesPropTest()
         with pytest.raises(ValueError):
-            seq.update(np.array([0.5, 1.0]), np.array([0, 1]))
+            seq.update(np.array([1.5, 1.0]), np.array([0, 1]))
+        with pytest.raises(ValueError):
+            seq.update(np.array([-0.1, 1.0]), np.array([0, 1]))
+
+    def test_binarises_continuous_input(self) -> None:
+        """Continuous inputs in [0, 1] are binarised at threshold=0.5."""
+        seq = SequentialPairedBayesPropTest()
+        snap = seq.update(np.array([0.3, 0.7]), np.array([0.9, 0.1]))
+        assert seq.successes_A == 1
+        assert seq.successes_B == 1
+        assert snap.n_A == 2 and snap.n_B == 2
 
     def test_rejects_unequal_paired_batches(self) -> None:
         seq = SequentialPairedBayesPropTest()

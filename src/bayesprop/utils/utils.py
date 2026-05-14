@@ -20,6 +20,75 @@ from bayesprop.resources.data_schemas import (
 )
 
 # ======================================================================
+#  Input binarisation
+# ======================================================================
+
+
+def binarize_if_needed(
+    y: npt.ArrayLike,
+    threshold: float = 0.5,
+    *,
+    name: str = "y",
+    verbose: bool = False,
+) -> np.ndarray:
+    """Return a 0/1 ``float64`` array, binarising continuous inputs in ``[0, 1]``.
+
+    The package's models all operate on binary 0/1 data, but users often
+    have continuous scores in ``[0, 1]`` (e.g. predicted probabilities,
+    classifier confidences). This helper provides a single, consistent
+    coercion across the non-paired and paired classes:
+
+    * If every entry of ``y`` is already exactly ``0`` or ``1`` (after
+      casting to float), the array is returned unchanged.
+    * Otherwise, values strictly outside ``[0, 1]`` or any ``NaN`` raise
+      :class:`ValueError` immediately — we never silently clip or truncate.
+    * Otherwise, ``y`` is binarised as ``(y >= threshold).astype(float)``.
+
+    Args:
+        y: Input scores. Any array-like accepted by :func:`numpy.asarray`.
+        threshold: Cut-off for binarisation. Values ``≥ threshold`` map to
+            ``1.0``, the rest to ``0.0``. Defaults to ``0.5``.
+        name: Name of the variable in error / warning messages
+            (e.g. ``"y_A_obs"``). Purely cosmetic.
+        verbose: If ``True``, print a one-line notice when binarisation
+            actually fires.
+
+    Returns:
+        ``np.ndarray`` of ``float64`` containing only ``0.0`` and ``1.0``.
+
+    Raises:
+        ValueError: If ``y`` contains ``NaN`` or any value outside
+            ``[0, 1]``.
+    """
+    arr = np.asarray(y, dtype=float)
+    if arr.size == 0:
+        return arr
+
+    # Fast path: already binary.
+    is_binary = np.all((arr == 0.0) | (arr == 1.0))
+    if is_binary:
+        return arr
+
+    # Validate range before binarising — silent truncation / clipping is
+    # the failure mode we are protecting users against.
+    if np.any(np.isnan(arr)):
+        raise ValueError(f"{name} contains NaN values; cannot binarise.")
+    if np.any((arr < 0.0) | (arr > 1.0)):
+        raise ValueError(
+            f"{name} contains values outside [0, 1] "
+            f"(observed range: [{arr.min():.4g}, {arr.max():.4g}]); "
+            f"refusing to binarise. Please rescale your scores to [0, 1] "
+            f"or supply 0/1 inputs directly."
+        )
+
+    if verbose:
+        print(
+            f"Warning: non-binary {name} detected, binarising at threshold {threshold}"
+        )
+    return (arr >= threshold).astype(float)
+
+
+# ======================================================================
 #  Standalone data simulation utilities
 # ======================================================================
 

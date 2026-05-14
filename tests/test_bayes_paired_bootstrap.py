@@ -106,10 +106,39 @@ class TestPairedBootstrapFit:
         with pytest.raises(ValueError, match="identical shapes"):
             m.fit(np.array([0, 1, 0]), np.array([0, 1]))
 
-    def test_rejects_non_binary(self) -> None:
+    def test_rejects_out_of_range(self) -> None:
+        """Inputs strictly outside [0, 1] must raise — silent truncation
+        is the failure mode the binariser protects against."""
         m = PairedBayesPropTestBB(n_samples=200)
-        with pytest.raises(ValueError, match="0/1"):
+        with pytest.raises(ValueError, match=r"outside \[0, 1\]"):
             m.fit(np.array([0, 1, 2]), np.array([0, 1, 0]))
+        with pytest.raises(ValueError, match=r"outside \[0, 1\]"):
+            m.fit(np.array([-0.1, 0.5, 0.9]), np.array([0, 1, 0]))
+
+    def test_binarises_continuous_input(self) -> None:
+        """Continuous inputs in [0, 1] are binarised at the configured
+        threshold; results match the equivalent 0/1 fit."""
+        m_cont = PairedBayesPropTestBB(n_samples=200, seed=7).fit(
+            np.array([0.2, 0.8, 0.9, 0.1]),
+            np.array([0.6, 0.4, 0.3, 0.7]),
+        )
+        m_bin = PairedBayesPropTestBB(n_samples=200, seed=7).fit(
+            np.array([0, 1, 1, 0]),
+            np.array([1, 0, 0, 1]),
+        )
+        assert m_cont.summary is not None and m_bin.summary is not None
+        assert m_cont.summary.mean_delta == m_bin.summary.mean_delta
+
+    def test_custom_threshold(self) -> None:
+        """A non-default threshold flips classifications above/below it."""
+        m = PairedBayesPropTestBB(n_samples=200, threshold=0.8, seed=0).fit(
+            np.array([0.7, 0.9, 0.85, 0.6]),
+            np.array([0.1, 0.2, 0.1, 0.05]),
+        )
+        # At threshold=0.8: y_A -> [0, 1, 1, 0]; y_B -> [0, 0, 0, 0].
+        assert m.y_A_obs is not None and m.y_B_obs is not None
+        assert m.y_A_obs.tolist() == [0, 1, 1, 0]
+        assert m.y_B_obs.tolist() == [0, 0, 0, 0]
 
     def test_rejects_empty_data(self) -> None:
         m = PairedBayesPropTestBB(n_samples=200)

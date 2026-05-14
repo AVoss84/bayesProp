@@ -12,6 +12,7 @@ from bayesprop.utils.utils import (
     bf10_to_ph0,
     bfda_power_curve,
     bfda_simulate,
+    binarize_if_needed,
     find_n_for_power,
     fisher_exact_nonpaired_test,
     mcnemar_paired_test,
@@ -292,3 +293,67 @@ class TestBfdaPlots:
         import matplotlib.pyplot as plt
 
         plt.close("all")
+
+
+# ── binarize_if_needed ───────────────────────────────────────
+
+
+class TestBinarizeIfNeeded:
+    """Unit tests for the shared binarisation helper.
+
+    The helper must be idempotent on already-binary input, binarise
+    continuous values in ``[0, 1]`` at the supplied threshold, and refuse
+    inputs that are out of range (positive or negative)."""
+
+    def test_passes_through_binary_input(self) -> None:
+        y = np.array([0, 1, 1, 0, 1], dtype=float)
+        out = binarize_if_needed(y)
+        # Same values, float dtype, untouched.
+        assert np.array_equal(out, y)
+        assert out.dtype == np.float64
+
+    def test_passes_through_binary_input_int_dtype(self) -> None:
+        # Integer 0/1 must also be recognised as already binary.
+        y = np.array([0, 1, 0], dtype=np.int64)
+        out = binarize_if_needed(y)
+        assert np.array_equal(out, y.astype(float))
+
+    def test_binarises_continuous_at_default_threshold(self) -> None:
+        y = np.array([0.1, 0.4, 0.5, 0.6, 0.9])
+        out = binarize_if_needed(y)
+        # ≥ 0.5 → 1, else 0.
+        assert out.tolist() == [0.0, 0.0, 1.0, 1.0, 1.0]
+
+    def test_binarises_continuous_at_custom_threshold(self) -> None:
+        y = np.array([0.1, 0.4, 0.5, 0.6, 0.9])
+        out = binarize_if_needed(y, threshold=0.7)
+        assert out.tolist() == [0.0, 0.0, 0.0, 0.0, 1.0]
+
+    def test_rejects_values_above_one(self) -> None:
+        with pytest.raises(ValueError, match=r"outside \[0, 1\]"):
+            binarize_if_needed(np.array([0.5, 1.5]))
+
+    def test_rejects_negative_values(self) -> None:
+        with pytest.raises(ValueError, match=r"outside \[0, 1\]"):
+            binarize_if_needed(np.array([-0.01, 0.5, 0.9]))
+
+    def test_rejects_nan_values(self) -> None:
+        with pytest.raises(ValueError, match="NaN"):
+            binarize_if_needed(np.array([0.3, np.nan, 0.6]))
+
+    def test_empty_input_round_trips(self) -> None:
+        # Empty arrays are a valid (no-op) input.
+        out = binarize_if_needed(np.array([], dtype=float))
+        assert out.size == 0
+
+    def test_verbose_prints_only_when_binarising(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        # Already-binary → silent even when verbose=True.
+        binarize_if_needed(np.array([0.0, 1.0]), verbose=True, name="y_test")
+        assert capsys.readouterr().out == ""
+
+        # Continuous → one warning line.
+        binarize_if_needed(np.array([0.2, 0.8]), verbose=True, name="y_test")
+        captured = capsys.readouterr().out
+        assert "y_test" in captured and "threshold" in captured

@@ -218,6 +218,7 @@ class TestPairedConfigs:
         assert cfg.prior_sigma_delta == 1.0
         assert cfg.seed == 0
         assert cfg.n_samples == 8_000
+        assert cfg.threshold == 0.5
 
     def test_pg_defaults(self) -> None:
         cfg = PairedPGConfig()
@@ -226,10 +227,18 @@ class TestPairedConfigs:
         assert cfg.n_iter == 1_000
         assert cfg.burn_in == 200
         assert cfg.n_chains == 2
+        assert cfg.threshold == 0.5
 
     def test_pg_invalid_sigma(self) -> None:
         with pytest.raises(ValidationError):
             PairedPGConfig(prior_sigma_delta=0.0)
+
+    def test_threshold_out_of_range_rejected(self) -> None:
+        """Threshold must lie in [0, 1] — the binariser's domain."""
+        with pytest.raises(ValidationError):
+            PairedLaplaceConfig(threshold=1.5)
+        with pytest.raises(ValidationError):
+            PairedPGConfig(threshold=-0.1)
 
 
 class TestMCMCDiagnostics:

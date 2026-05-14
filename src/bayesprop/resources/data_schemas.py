@@ -281,6 +281,12 @@ class PairedLaplaceConfig(BaseModel):
     n_samples: int = Field(
         default=8_000, gt=0, description="Number of Laplace posterior draws."
     )
+    threshold: float = Field(
+        default=0.5,
+        ge=0,
+        le=1,
+        description="Binarisation threshold for continuous inputs in [0, 1].",
+    )
 
 
 # ====================================================================== #
@@ -305,6 +311,12 @@ class PairedPGConfig(BaseModel):
         default=200, ge=0, description="Number of warm-up iterations to discard."
     )
     n_chains: int = Field(default=2, gt=0, description="Number of MCMC chains.")
+    threshold: float = Field(
+        default=0.5,
+        ge=0,
+        le=1,
+        description="Binarisation threshold for continuous inputs in [0, 1].",
+    )
 
 
 class MCMCParamDiagnostic(BaseModel):

@@ -391,6 +391,22 @@ on the materialised cumulative arrays.
 See the runnable notebook at
 `src/notebooks/sequential_paired_laplace_demo.ipynb` for the full demo.
 
+## Inputs and binarisation
+
+Like the non-paired model, `PairedBayesPropTest` accepts both already-binary
+`{0, 1}` inputs and continuous scores in `[0, 1]` (e.g. classifier
+probabilities). Continuous inputs are auto-binarised at a configurable
+`threshold` (default `0.5`):
+
+```python
+model = PairedBayesPropTest(threshold=0.5, verbose=True).fit(scores_A, scores_B)
+```
+
+Values strictly outside `[0, 1]` or `NaN` raise `ValueError` instead of
+being silently truncated — pass already-binarised arrays if you want the
+fast path. The same `threshold` argument is exposed on
+`SequentialPairedBayesPropTest` for streaming batches.
+
 ## API
 
 See [API Reference — Paired Model (Laplace)](../api/bayes_paired_laplace.md) for full method documentation.

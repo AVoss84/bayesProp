@@ -62,6 +62,7 @@ from bayesprop.resources.data_schemas import (
     PairedSummary,
     ROPEResult,
 )
+from bayesprop.utils.utils import binarize_if_needed
 
 
 class PairedBayesPropTestBB:
@@ -105,6 +106,8 @@ class PairedBayesPropTestBB:
         n_samples: int = 20_000,
         rope_epsilon: float = 0.02,
         dirichlet_alpha: float = 1.0,
+        threshold: float = 0.5,
+        verbose: bool = False,
     ) -> None:
         """Initialise configuration.
 
@@ -117,6 +120,11 @@ class PairedBayesPropTestBB:
                 ``< 1`` concentrate posterior mass on a small number of
                 observations (sharper, more bootstrap-like), values
                 ``> 1`` smooth toward the empirical mean.
+            threshold: Cutoff used to binarise continuous inputs in
+                ``[0, 1]`` passed to :meth:`fit`. Already-binary inputs
+                are left untouched. Defaults to ``0.5``.
+            verbose: If ``True``, emit a one-line notice whenever
+                continuous inputs are binarised.
 
         Raises:
             ValueError: If ``dirichlet_alpha <= 0`` or ``n_samples <= 0``.
@@ -132,6 +140,8 @@ class PairedBayesPropTestBB:
         self.n_samples: int = n_samples
         self.rope_epsilon: float = rope_epsilon
         self.dirichlet_alpha: float = dirichlet_alpha
+        self.threshold: float = threshold
+        self.verbose: bool = verbose
 
         # Populated by .fit().
         self.y_A_obs: np.ndarray | None = None
@@ -159,28 +169,39 @@ class PairedBayesPropTestBB:
         chunked to keep peak memory bounded (~400 MB).
 
         Args:
-            y_A_obs: Binary outcomes (0/1) for arm A. Length ``n``.
-            y_B_obs: Binary outcomes (0/1) for arm B. Length ``n``,
-                aligned with ``y_A_obs`` (paired design).
+            y_A_obs: Observed scores for arm A — either binary ``{0, 1}``
+                or continuous in ``[0, 1]``. Continuous inputs are
+                binarised at ``self.threshold`` (default ``0.5``); values
+                outside ``[0, 1]`` raise :class:`ValueError`.
+                Length ``n``.
+            y_B_obs: Observed scores for arm B — same conventions.
+                Length ``n``, aligned with ``y_A_obs`` (paired design).
 
         Returns:
             ``self`` (for method chaining).
 
         Raises:
-            ValueError: If shapes mismatch or values are non-binary.
+            ValueError: If shapes mismatch or values are outside ``[0, 1]``.
         """
-        arr_A = np.asarray(y_A_obs, dtype=np.int64)
-        arr_B = np.asarray(y_B_obs, dtype=np.int64)
-        if arr_A.shape != arr_B.shape:
+        # Shape compatibility before binarisation so the user gets a
+        # crisp "shapes mismatch" message rather than two
+        # silently-coerced arrays of different lengths.
+        arr_A_raw = np.asarray(y_A_obs)
+        arr_B_raw = np.asarray(y_B_obs)
+        if arr_A_raw.shape != arr_B_raw.shape:
             raise ValueError(
                 f"y_A_obs and y_B_obs must have identical shapes; got "
-                f"{arr_A.shape} and {arr_B.shape}"
+                f"{arr_A_raw.shape} and {arr_B_raw.shape}"
             )
-        for name, arr in (("y_A_obs", arr_A), ("y_B_obs", arr_B)):
-            if arr.size and not np.all((arr == 0) | (arr == 1)):
-                raise ValueError(
-                    f"{name} must contain only 0/1 values; got non-binary entries"
-                )
+
+        y_A_bin = binarize_if_needed(
+            y_A_obs, self.threshold, name="y_A_obs", verbose=self.verbose
+        )
+        y_B_bin = binarize_if_needed(
+            y_B_obs, self.threshold, name="y_B_obs", verbose=self.verbose
+        )
+        arr_A = y_A_bin.astype(np.int64)
+        arr_B = y_B_bin.astype(np.int64)
 
         n = int(arr_A.size)
         if n == 0:

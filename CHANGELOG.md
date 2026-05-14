@@ -19,6 +19,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   characteristics workflows.
 - Unit tests covering the operating-characteristics utilities
   (`tests/test_operation_characteristics.py`).
+- Shared `bayesprop.utils.utils.binarize_if_needed` helper plus a
+  matching `threshold` (default `0.5`) and `verbose` argument on the
+  paired classes `PairedBayesPropTest`, `PairedBayesPropTestPG`,
+  `PairedBayesPropTestBB`, and `SequentialPairedBayesPropTest`. Continuous
+  scores in `[0, 1]` are now auto-binarised at the configured threshold
+  (mirroring the non-paired API), and out-of-range or `NaN` inputs raise
+  a clear `ValueError` instead of being silently truncated. The
+  Pydantic schemas `PairedLaplaceConfig` and `PairedPGConfig` gained a
+  matching `threshold` field.
 
 ### Changed
 - Lowered default MCMC settings for `PairedBayesPropTestPG` from

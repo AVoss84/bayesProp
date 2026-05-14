@@ -45,6 +45,7 @@ from bayesprop.resources.data_schemas import (
     SequentialLaplaceLookResult,
     SequentialLaplaceState,
 )
+from bayesprop.utils.utils import binarize_if_needed
 
 
 def sigmoid(x: npt.ArrayLike) -> np.ndarray:
@@ -211,6 +212,8 @@ class PairedBayesPropTest:
         n_samples: int = 8000,
         decision_rule: DecisionRuleType = "all",
         rope_epsilon: float = 0.02,
+        threshold: float = 0.5,
+        verbose: bool = False,
     ) -> None:
         """Initialise model configuration.
 
@@ -222,12 +225,19 @@ class PairedBayesPropTest:
             decision_rule: Default decision framework — one of
                 ``"bayes_factor"``, ``"posterior_null"``, ``"rope"``, or ``"all"``.
             rope_epsilon: Half-width of the ROPE interval (default 0.02 = 2 pp).
+            threshold: Cutoff used to binarise continuous inputs in
+                ``[0, 1]`` passed to :meth:`fit`. Already-binary inputs are
+                left untouched. Defaults to ``0.5``.
+            verbose: If ``True``, emit a one-line notice whenever
+                continuous inputs are binarised.
         """
         self.prior_sigma_delta: float = prior_sigma_delta
         self.seed: int = seed
         self.n_samples: int = n_samples
         self.decision_rule: DecisionRuleType = decision_rule
         self.rope_epsilon: float = rope_epsilon
+        self.threshold: float = threshold
+        self.verbose: bool = verbose
 
         # --- Populated by .fit() ---
         self.laplace: dict[str, Any] | None = None
@@ -272,14 +282,23 @@ class PairedBayesPropTest:
         where w_A = p_A(1-p_A), w_B = p_B(1-p_B), evaluated at MAP.
 
         Args:
-            y_A_obs: Binary observed scores for model A (0 or 1).
-            y_B_obs: Binary observed scores for model B (0 or 1).
+            y_A_obs: Observed scores for model A — either binary ``{0, 1}``
+                or continuous in ``[0, 1]``. Continuous inputs are
+                binarised at ``self.threshold`` (default ``0.5``); values
+                outside ``[0, 1]`` raise :class:`ValueError`.
+            y_B_obs: Observed scores for model B — same conventions.
 
         Returns:
             self (for method chaining).
         """
-        self.y_A_obs = np.asarray(y_A_obs, dtype=int)
-        self.y_B_obs = np.asarray(y_B_obs, dtype=int)
+        y_A_bin = binarize_if_needed(
+            y_A_obs, self.threshold, name="y_A_obs", verbose=self.verbose
+        )
+        y_B_bin = binarize_if_needed(
+            y_B_obs, self.threshold, name="y_B_obs", verbose=self.verbose
+        )
+        self.y_A_obs = y_A_bin.astype(int)
+        self.y_B_obs = y_B_bin.astype(int)
 
         n_A = int(len(self.y_A_obs))
         k_A = int(self.y_A_obs.sum())
@@ -1225,6 +1244,7 @@ class SequentialPairedBayesPropTest:
         seed: int = 0,
         n_samples: int = 8000,
         verbose: bool = False,
+        threshold: float = 0.5,
     ) -> None:
         """Initialise the sequential paired Laplace test.
 
@@ -1243,7 +1263,11 @@ class SequentialPairedBayesPropTest:
                 (probability scale).
             seed: Random seed for the Laplace posterior draws.
             n_samples: Number of draws from the Laplace posterior per look.
-            verbose: If True, print a one-line summary per look.
+            verbose: If True, print a one-line summary per look (and a
+                notice whenever continuous batches are binarised).
+            threshold: Cutoff used to binarise continuous batches in
+                ``[0, 1]`` passed to :meth:`update`. Already-binary
+                batches are left untouched. Defaults to ``0.5``.
         """
         if bf_lower >= bf_upper:
             raise ValueError("bf_lower must be strictly less than bf_upper")
@@ -1260,6 +1284,7 @@ class SequentialPairedBayesPropTest:
         self.seed = seed
         self.n_samples = n_samples
         self.verbose = verbose
+        self.threshold = threshold
 
         # Cumulative sufficient statistics (everything the likelihood sees).
         self.n_A: int = 0
@@ -1314,18 +1339,15 @@ class SequentialPairedBayesPropTest:
         if self._stopped:
             raise RuntimeError(f"Sequential test already stopped: {self._stop_reason}")
 
-        ya = np.asarray(y_a_batch)
-        yb = np.asarray(y_b_batch)
+        ya = binarize_if_needed(
+            y_a_batch, self.threshold, name="y_a_batch", verbose=self.verbose
+        )
+        yb = binarize_if_needed(
+            y_b_batch, self.threshold, name="y_b_batch", verbose=self.verbose
+        )
         if len(ya) != len(yb):
             raise ValueError(
                 f"Paired batches must have equal length, got {len(ya)} and {len(yb)}."
-            )
-        if ya.size and not (
-            np.all((ya == 0) | (ya == 1)) and np.all((yb == 0) | (yb == 1))
-        ):
-            raise ValueError(
-                "SequentialPairedBayesPropTest expects already-binarized "
-                "0/1 inputs (binarize continuous scores beforehand)."
             )
 
         self.n_A += int(len(ya))

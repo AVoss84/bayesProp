@@ -482,6 +482,19 @@ plot_bfda_sensitivity(
 
 See the [BFDA guide](bfda.md) for the full sample-size planning workflow.
 
+## Inputs and binarisation
+
+`PairedBayesPropTestPG` accepts both already-binary `{0, 1}` inputs and
+continuous scores in `[0, 1]`. Continuous inputs are auto-binarised at a
+configurable `threshold` (default `0.5`):
+
+```python
+model = PairedBayesPropTestPG(threshold=0.5, verbose=True).fit(scores_A, scores_B)
+```
+
+Values strictly outside `[0, 1]` or `NaN` raise `ValueError` instead of
+being silently truncated. Pass already-binarised arrays for the fast path.
+
 ## API
 
 See [API Reference — Paired Model (Pólya-Gamma)](../api/bayes_paired_pg.md) for full method documentation.

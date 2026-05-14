@@ -162,6 +162,29 @@ class TestPairedPGFit:
     def test_trace_summary_is_dataframe(self, fitted_model: PairedBayesPropTestPG) -> None:
         assert isinstance(fitted_model.trace_summary, pd.DataFrame)
 
+    def test_binarises_continuous_input(self) -> None:
+        """Continuous scores in [0, 1] are binarised at threshold=0.5 and
+        downstream sufficient statistics match an equivalent 0/1 fit."""
+        rng = np.random.default_rng(7)
+        scores_A = rng.uniform(0.0, 1.0, size=60)
+        scores_B = rng.uniform(0.0, 1.0, size=60)
+        y_a_bin = (scores_A >= 0.5).astype(int)
+        y_b_bin = (scores_B >= 0.5).astype(int)
+
+        m = PairedBayesPropTestPG(
+            seed=0, n_iter=300, burn_in=50, n_chains=2
+        ).fit(scores_A, scores_B)
+        assert np.array_equal(m.y_A_obs, y_a_bin)
+        assert np.array_equal(m.y_B_obs, y_b_bin)
+
+    def test_rejects_out_of_range_input(self) -> None:
+        """Out-of-range inputs raise instead of being silently truncated."""
+        m = PairedBayesPropTestPG(n_iter=200, burn_in=50, n_chains=2)
+        with pytest.raises(ValueError, match=r"outside \[0, 1\]"):
+            m.fit(np.array([0.3, 1.5, 0.8]), np.array([0, 1, 0]))
+        with pytest.raises(ValueError, match=r"outside \[0, 1\]"):
+            m.fit(np.array([0.3, 0.5, 0.8]), np.array([-0.1, 1.0, 0.0]))
+
 
 class TestPairedPGMCMCDiagnostics:
     """Tests for PairedBayesPropTestPG.mcmc_diagnostics()."""
