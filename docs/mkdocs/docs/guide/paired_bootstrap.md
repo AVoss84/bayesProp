@@ -122,11 +122,13 @@ paired model (Laplace or Pólya–Gamma) with a Savage–Dickey BF — see
 ## Plotting
 
 ```python
-model.plot_posterior(rope=(-0.05, 0.05))
+model.plot_posteriors()                    # θ_A and θ_B overlay
+model.plot_posterior_delta()                # Δ = θ_A − θ_B with 95 % CI
 ```
 
-Shows the BB posterior histogram with the 95 % CI band, posterior mean,
-and ROPE overlay.
+`plot_posteriors()` shows the KDE overlay of the marginal θ_A and θ_B
+posteriors. `plot_posterior_delta()` shows the posterior of
+Δ = θ_A − θ_B on the probability scale with the 95 % CI band.
 
 ## Performance notes
 

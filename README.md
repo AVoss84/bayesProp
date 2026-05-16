@@ -41,17 +41,18 @@ Please check out our [Getting Started](https://avoss84.github.io/bayesProp/getti
 
 ```python
 import numpy as np
-from bayesprop.resources.bayes_nonpaired import NonPairedBayesPropTest
+from bayesprop.resources.bayes_paired_laplace import PairedBayesPropTest
 
-# Binary or [0,1]-valued data:
+# Paired binary data (y_A[i] and y_B[i] refer to the same item)
 y_A = np.array([1,1,0,1,1,0,1,1,1,1,1,1,1,0,1,1,1,0,1,1])     # 16/20 = 0.80
 y_B = np.array([0,1,0,0,1,0,0,1,0,0,1,0,1,0,0,1,0,0,0,0])     #  6/20 = 0.30
 
 # Fit posterior & summarise
-model = NonPairedBayesPropTest(seed=42).fit(y_A, y_B)
+model = PairedBayesPropTest(seed=42).fit(y_A, y_B)
 
 s = model.summary
-print(f"\nMean Δ (θ_A − θ_B) = {s.mean_delta:+.4f}")
+print(f"θ_A = {s.theta_A_mean:.4f},  θ_B = {s.theta_B_mean:.4f}")
+print(f"Mean Δ (θ_A − θ_B) = {s.mean_delta:+.4f}")
 print(f"95% CI = [{s.ci_95.lower:.4f}, {s.ci_95.upper:.4f}]")
 print(f"P(A > B) = {s.p_A_greater_B:.4f}")
 
@@ -60,12 +61,13 @@ d = model.decide()
 bf = d.bayes_factor
 
 print("\n--- Unified Decision ---")
-print(f"  Bayes Factor: BF₁₀ = {bf.BF_10:.2f}  → {bf.decision}")
-print(f"  Posterior Null: P(H₀|D) = {d.posterior_null.p_H0:.4f}  → {d.posterior_null.decision}")
+print(f"  Bayes Factor: BF_10 = {bf.BF_10:.2f}  → {bf.decision}")
+print(f"  Posterior Null: P(H0|D) = {d.posterior_null.p_H0:.4f}  → {d.posterior_null.decision}")
 print(f"  ROPE: {d.rope.decision} ({d.rope.pct_in_rope:.1%} in ROPE)")
 
 # Plots
 model.plot_posteriors()
+model.plot_posterior_delta()
 model.plot_savage_dickey()
 ```
 

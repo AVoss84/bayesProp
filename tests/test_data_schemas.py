@@ -196,6 +196,8 @@ class TestPairedSummary:
             mean_delta=0.05,
             ci_95=CredibleInterval(lower=-0.1, upper=0.2),
             p_A_greater_B=0.6,
+            theta_A_mean=0.55,
+            theta_B_mean=0.50,
             delta_A_posterior_mean=0.2,
         )
         assert s.delta_A_posterior_mean == 0.2
@@ -206,6 +208,8 @@ class TestPairedSummary:
                 mean_delta=0.05,
                 ci_95=CredibleInterval(lower=-0.1, upper=0.2),
                 p_A_greater_B=-0.1,
+                theta_A_mean=0.55,
+                theta_B_mean=0.50,
                 delta_A_posterior_mean=0.2,
             )
 

@@ -33,6 +33,7 @@ import numpy.typing as npt
 import pandas as pd
 from scipy.stats import gaussian_kde, norm
 
+from bayesprop.resources.base import BaseBayesPropTest
 from bayesprop.resources.data_schemas import (
     CredibleInterval,
     DecisionRuleType,
@@ -173,7 +174,7 @@ def _paired_laplace_from_counts(
     return np.array([mu, delta]), cov, H
 
 
-class PairedBayesPropTest:
+class PairedBayesPropTest(BaseBayesPropTest):
     """Pooled Bernoulli logistic model for paired A/B comparison.
 
     Uses Laplace approximation (MAP + Hessian) instead of full MCMC
@@ -247,6 +248,24 @@ class PairedBayesPropTest:
         self.delta_samples: np.ndarray | None = None
         self.y_A_obs: np.ndarray | None = None
         self.y_B_obs: np.ndarray | None = None
+
+    def __repr__(self) -> str:
+        """Return an informative string representation."""
+        cls = type(self).__name__
+        header = (
+            f"{cls}(n_samples={self.n_samples}, "
+            f"prior_\u03c3_\u03b4={self.prior_sigma_delta}, seed={self.seed})"
+        )
+        if self.summary is None:
+            return header
+        s = self.summary
+        return (
+            f"{header}\n"
+            f"  \u03b8_A = {s.theta_A_mean:.4f},  \u03b8_B = {s.theta_B_mean:.4f}\n"
+            f"  Mean \u0394 = {s.mean_delta:+.4f},  "
+            f"95% CI = [{s.ci_95.lower:.4f}, {s.ci_95.upper:.4f}]\n"
+            f"  P(A > B) = {s.p_A_greater_B:.4f}"
+        )
 
     # ------------------------------------------------------------------ #
     #  Fitting
@@ -339,6 +358,8 @@ class PairedBayesPropTest:
             mean_delta=float(Delta_s.mean()),
             ci_95=CredibleInterval(lower=float(delta_lo), upper=float(delta_hi)),
             **{"P(A > B)": float((Delta_s > 0).mean())},
+            theta_A_mean=float(pA_s.mean()),
+            theta_B_mean=float(pB_s.mean()),
             delta_A_posterior_mean=float(delta_A_s.mean()),
         )
 
@@ -706,17 +727,98 @@ class PairedBayesPropTest:
         plt.tight_layout()
         plt.show()
 
-    def plot_posterior_delta(self, color: str = "#2196F3", **kwargs) -> None:
-        """KDE posterior density of delta_A (logit scale) with 95% CI."""
+    def plot_posteriors(self, **kwargs: Any) -> None:
+        """Overlaid KDE posteriors of θ_A and θ_B (probability scale).
+
+        Plots the implied success probabilities ``θ_A = σ(μ + δ_A)``
+        and ``θ_B = σ(μ)`` derived from the Laplace posterior samples
+        as overlaid KDE densities.
+
+        Args:
+            **kwargs: Accepts ``figsize`` (default ``(7, 5)``) and
+                ``title`` (default ``"Posterior: θ_A and θ_B"``).
+        """
         import matplotlib.pyplot as plt
 
         self._check_fitted()
-        samples = self.delta_A_samples
-        ci_low, ci_high = np.quantile(samples, [0.025, 0.975])
-        mean_val = samples.mean()
+        assert self.laplace is not None
+        mu_s = self.laplace["mu_samples"]
+        delta_s = self.laplace["delta_A_samples"]
 
-        kde = gaussian_kde(samples)
-        x_grid = np.linspace(samples.min() - 0.5, samples.max() + 0.5, 500)
+        p_A_s = sigmoid(mu_s + delta_s)
+        p_B_s = sigmoid(mu_s)
+
+        figsize = kwargs.pop("figsize", (7, 5))
+        fig, ax = plt.subplots(figsize=figsize)
+
+        kde_A = gaussian_kde(p_A_s)
+        kde_B = gaussian_kde(p_B_s)
+        lo = min(p_A_s.min(), p_B_s.min())
+        hi = max(p_A_s.max(), p_B_s.max())
+        x = np.linspace(max(0, lo - 0.05), min(1, hi + 0.05), 500)
+
+        pdf_A = kde_A(x)
+        pdf_B = kde_B(x)
+        ax.plot(
+            x,
+            pdf_A,
+            color="#2196F3",
+            linewidth=2,
+            label=f"θ_A  mean={p_A_s.mean():.3f}",
+        )
+        ax.fill_between(x, pdf_A, alpha=0.15, color="#2196F3")
+        ax.plot(
+            x,
+            pdf_B,
+            color="#4CAF50",
+            linewidth=2,
+            label=f"θ_B  mean={p_B_s.mean():.3f}",
+        )
+        ax.fill_between(x, pdf_B, alpha=0.15, color="#4CAF50")
+
+        ax.axvline(
+            p_A_s.mean(), color="#2196F3", linestyle="--", linewidth=1, alpha=0.6
+        )
+        ax.axvline(
+            p_B_s.mean(), color="#4CAF50", linestyle="--", linewidth=1, alpha=0.6
+        )
+        ax.set_xlabel("Success probability")
+        ax.set_ylabel("Density")
+        ax.set_title(
+            kwargs.pop("title", "Posterior: θ_A and θ_B"),
+            fontsize=12,
+            fontweight="bold",
+        )
+        ax.legend(fontsize=9)
+        ax.grid(alpha=0.3)
+        plt.tight_layout()
+        plt.show()
+
+    def plot_posterior_delta(self, color: str = "#9C27B0", **kwargs: Any) -> None:
+        """KDE posterior density of Δ = θ_A − θ_B (probability scale) with 95% CI.
+
+        Args:
+            color: Colour for the density curve and fill.
+            **kwargs: Accepts ``figsize`` (default ``(7, 5)``),
+                ``title`` (default ``"Posterior: Δ = θ_A − θ_B"``),
+                ``xlabel``, ``ylabel``.
+        """
+        import matplotlib.pyplot as plt
+
+        self._check_fitted()
+        assert self.laplace is not None
+        mu_s = self.laplace["mu_samples"]
+        delta_s = self.laplace["delta_A_samples"]
+
+        p_A_s = sigmoid(mu_s + delta_s)
+        p_B_s = sigmoid(mu_s)
+        Delta_s = p_A_s - p_B_s
+
+        ci_low, ci_high = np.quantile(Delta_s, [0.025, 0.975])
+        mean_val = float(Delta_s.mean())
+
+        kde = gaussian_kde(Delta_s)
+        x_grid = np.linspace(Delta_s.min() - 0.05, Delta_s.max() + 0.05, 500)
         density = kde(x_grid)
 
         figsize = kwargs.pop("figsize", (7, 5))
@@ -733,7 +835,7 @@ class PairedBayesPropTest:
             linestyle="-",
             linewidth=1.5,
             alpha=0.8,
-            label=f"Mean = {mean_val:.3f}",
+            label=f"Mean = {mean_val:.4f}",
         )
         ax.axvline(
             0,
@@ -741,12 +843,12 @@ class PairedBayesPropTest:
             linestyle="--",
             linewidth=1,
             alpha=0.6,
-            label="\u03b4_A = 0 (no difference)",
+            label="Δ = 0 (no difference)",
         )
-        ax.set_xlabel(kwargs.pop("xlabel", "\u03b4_A (logit scale)"), fontsize=11)
+        ax.set_xlabel(kwargs.pop("xlabel", "Δ = θ_A − θ_B"), fontsize=11)
         ax.set_ylabel(kwargs.pop("ylabel", "Density"), fontsize=11)
         ax.set_title(
-            kwargs.pop("title", "Posterior of \u03b4_A (Binomial)"),
+            kwargs.pop("title", "Posterior: Δ = θ_A − θ_B"),
             fontsize=12,
             fontweight="bold",
         )
@@ -1032,6 +1134,10 @@ class PairedBayesPropTest:
 
         mu_map, delta_map = self.laplace["map"]
         cov = self.laplace["cov"]
+        n_A = self.laplace["n_A"]
+        k_A = self.laplace["k_A"]
+        n_B = self.laplace["n_B"]
+        k_B = self.laplace["k_B"]
 
         # Laplace posterior info
         s = self.summary
@@ -1040,23 +1146,27 @@ class PairedBayesPropTest:
             if s.p_A_greater_B > 0.95
             else ("Tied" if s.p_A_greater_B > 0.5 else "B wins")
         )
-        print("Laplace posterior summary")
+        print("Laplace posterior summary (Paired)")
         print("=" * 60)
+        print(f"  \u03b8_A  mean={s.theta_A_mean:.4f}  " f"[n_A={n_A}, k_A={k_A}]")
+        print(f"  \u03b8_B  mean={s.theta_B_mean:.4f}  " f"[n_B={n_B}, k_B={k_B}]")
+        print(f"  Mean \u0394 (\u03b8_A \u2212 \u03b8_B):  {s.mean_delta:.4f}")
+        print(f"  95% CI:              [{s.ci_95.lower:.4f}, {s.ci_95.upper:.4f}]")
+        print(f"  P(A > B):            {s.p_A_greater_B:.4f}")
+        print(f"  Verdict:             {verdict}")
+        print()
+        print("Logit-scale parameters")
+        print("-" * 60)
         print(f"  MAP: \u03bc={mu_map:.4f}, \u03b4_A={delta_map:.4f}")
         print(
             f"  Posterior sd: \u03bc={np.sqrt(cov[0, 0]):.4f}, \u03b4_A={np.sqrt(cov[1, 1]):.4f}"
         )
         print(f"  Correlation: {cov[0, 1] / np.sqrt(cov[0, 0] * cov[1, 1]):.3f}")
-        print(f"  Mean \u0394 (prob scale):  {s.mean_delta:.4f}")
-        print(f"  95% CI:               [{s.ci_95.lower:.4f}, {s.ci_95.upper:.4f}]")
-        print(f"  P(A > B):             {s.p_A_greater_B:.4f}")
-        print(f"  \u03b4_A (logit scale):    {s.delta_A_posterior_mean:.4f}")
-        print(f"  Verdict:              {verdict}")
 
         # Savage-Dickey
         bf = self.savage_dickey_test()
         print()
-        print("Savage-Dickey Bayes Factor: H0 (\u03b4_A = 0) vs H1 (\u03b4_A \u2260 0)")
+        print("Savage-Dickey Bayes Factor: H0 (\u0394 = 0) vs H1 (\u0394 \u2260 0)")
         print("=" * 60)
         print(f"  Prior  density at \u03b4=0: {bf.prior_density_at_0:.6f}")
         print(f"  Post.  density at \u03b4=0: {bf.posterior_density_at_0:.2e}")

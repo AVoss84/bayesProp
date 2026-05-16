@@ -325,9 +325,10 @@ $BF_{10}=9.91$ sits at the upper edge of "moderate" on Jeffreys' scale
 
 ```python
 model.plot_posteriors(title="Beta-Bernoulli Posteriors")
+model.plot_posterior_delta()
 ```
 
-![Posterior distributions of θ_A, θ_B, and Δ](../images/non-paired/posterior_distributions.png)
+![Posterior distributions of θ_A and θ_B](../images/non-paired/posterior_distributions.png)
 
 ### 5. Savage-Dickey plot
 

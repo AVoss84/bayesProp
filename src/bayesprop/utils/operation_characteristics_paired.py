@@ -109,8 +109,8 @@ def simulate_fixed_n_paired(
     For each of ``n_sim`` replicates we
 
     1. generate one paired dataset of size ``n`` via
-       :func:`simulate_paired_scores` with ``μ = logit(p_B)`` and
-       ``δ_A = logit(p_A) − logit(p_B)`` (``δ_B = 0``, ``σ_θ = 0``);
+       :func:`simulate_paired_scores` with ``theta_A = p_A`` and
+       ``theta_B = p_B`` (``σ_θ = 0``);
     2. fit :class:`PairedBayesPropTest` with prior
        ``δ_A ~ N(0, prior_sigma_delta²)``;
     3. compute the Savage–Dickey BF on ``δ_A = 0`` and classify the
@@ -158,17 +158,11 @@ def simulate_fixed_n_paired(
     delta_true = p_A - p_B
     pvals = np.empty(n_sim, dtype=float)
 
-    # Translate the user-facing (p_A, p_B) into the analysis-model
-    # parametrisation expected by simulate_paired_scores.
-    mu = _logit(p_B)
-    delta_A = _logit(p_A) - mu
-
     for i in range(n_sim):
         sim = simulate_paired_scores(
             N=n,
-            mu=mu,
-            delta_A=delta_A,
-            delta_B=0.0,
+            theta_A=p_A,
+            theta_B=p_B,
             sigma_theta=0.0,
             rng=rng,
         )
@@ -317,8 +311,6 @@ def simulate_sequential_paired(
         fractions of trials whose final classification (via
         :func:`classify_bf`) is ``"reject"`` / ``"accept"``.
     """
-    mu = _logit(p_B)
-    delta_A = _logit(p_A) - mu
     max_looks = n_max // batch_size
 
     stop_n: list[int] = []
@@ -339,9 +331,8 @@ def simulate_sequential_paired(
         for _look in range(max_looks):
             batch = simulate_paired_scores(
                 N=batch_size,
-                mu=mu,
-                delta_A=delta_A,
-                delta_B=0.0,
+                theta_A=p_A,
+                theta_B=p_B,
                 sigma_theta=0.0,
                 rng=rng,
             )

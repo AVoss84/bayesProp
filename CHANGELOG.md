@@ -6,6 +6,42 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [0.1.1.1] - 2026-05-16
+### Added
+- Abstract base class `BaseBayesPropTest` in `bayesprop.resources.base`
+  defining the shared public API (`fit`, `decide`, `rope_test`,
+  `plot_posteriors`, `plot_posterior_delta`, `print_summary`) that all
+  four model classes now inherit from.
+- `plot_posteriors()` method on all four models — single-panel overlay of
+  the θ_A and θ_B posterior densities.
+- `plot_posterior_delta()` method on all four models — single-panel KDE of
+  Δ = θ_A − θ_B on the **probability scale** with 95 % CI shading.
+- `PairedBayesPropTestBB`: new `theta_A_samples` / `theta_B_samples`
+  attributes stored during `fit()`, plus `plot_posteriors()`,
+  `plot_posterior_delta()`, and `print_summary()`.
+
+### Changed
+- `NonPairedBayesPropTest.plot_posteriors()` refactored from a two-panel
+  layout to a single-panel θ_A / θ_B overlay.
+- `PairedBayesPropTest.plot_posterior_delta()` (Laplace) and
+  `PairedBayesPropTestPG.plot_posterior_delta()` now plot Δ = θ_A − θ_B
+  on the probability scale instead of δ_A on the logit scale.
+- All four model classes (`NonPairedBayesPropTest`,
+  `PairedBayesPropTest`, `PairedBayesPropTestPG`,
+  `PairedBayesPropTestBB`) now inherit from `BaseBayesPropTest`.
+- Updated README quick-start examples to use the new `plot_posteriors()`
+  and `plot_posterior_delta()` API.
+- Updated notebooks (`deepeval_bayesprop_example`,
+  `bayesian_AB_model_comparison_paired_laplace`,
+  `bayesian_AB_model_comparison_paired_gibbs`) to use the new plot API.
+
+### Deprecated
+- `PairedBayesPropTest.plot_laplace_posterior()` — kept for backward
+  compatibility; use `plot_posteriors()` + `plot_posterior_delta()` instead.
+- `PairedBayesPropTestBB.plot_posterior()` — kept for backward
+  compatibility; use `plot_posteriors()` + `plot_posterior_delta()` instead.
+
+
 ## [0.1.0.7] - 2026-05-14
 ### Added
 - Operating characteristics module for the non-paired model

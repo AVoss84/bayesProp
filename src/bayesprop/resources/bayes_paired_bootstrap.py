@@ -56,6 +56,7 @@ import numpy as np
 import numpy.typing as npt
 import pandas as pd
 
+from bayesprop.resources.base import BaseBayesPropTest
 from bayesprop.resources.data_schemas import (
     CredibleInterval,
     HypothesisDecision,
@@ -65,7 +66,7 @@ from bayesprop.resources.data_schemas import (
 from bayesprop.utils.utils import binarize_if_needed
 
 
-class PairedBayesPropTestBB:
+class PairedBayesPropTestBB(BaseBayesPropTest):
     """Bayesian-bootstrap paired A/B test for binary outcomes.
 
     Nonparametric counterpart of
@@ -130,9 +131,7 @@ class PairedBayesPropTestBB:
             ValueError: If ``dirichlet_alpha <= 0`` or ``n_samples <= 0``.
         """
         if dirichlet_alpha <= 0:
-            raise ValueError(
-                f"dirichlet_alpha must be > 0; got {dirichlet_alpha}"
-            )
+            raise ValueError(f"dirichlet_alpha must be > 0; got {dirichlet_alpha}")
         if n_samples <= 0:
             raise ValueError(f"n_samples must be > 0; got {n_samples}")
 
@@ -147,10 +146,27 @@ class PairedBayesPropTestBB:
         self.y_A_obs: np.ndarray | None = None
         self.y_B_obs: np.ndarray | None = None
         self.delta_samples: np.ndarray | None = None
+        self.theta_A_samples: np.ndarray | None = None
+        self.theta_B_samples: np.ndarray | None = None
         self.summary: PairedSummary | None = None
         self.trace_summary: pd.DataFrame | None = None
         # Internal cache (mirrors the .laplace dict of the parametric classes).
         self._fitted_state: dict[str, Any] | None = None
+
+    def __repr__(self) -> str:
+        """Return an informative string representation."""
+        cls = type(self).__name__
+        header = f"{cls}(n_samples={self.n_samples}, seed={self.seed})"
+        if self.summary is None:
+            return header
+        s = self.summary
+        return (
+            f"{header}\n"
+            f"  \u03b8_A = {s.theta_A_mean:.4f},  \u03b8_B = {s.theta_B_mean:.4f}\n"
+            f"  Mean \u0394 = {s.mean_delta:+.4f},  "
+            f"95% CI = [{s.ci_95.lower:.4f}, {s.ci_95.upper:.4f}]\n"
+            f"  P(A > B) = {s.p_A_greater_B:.4f}"
+        )
 
     # ------------------------------------------------------------------ #
     #  Fitting
@@ -221,12 +237,18 @@ class PairedBayesPropTestBB:
         alpha_vec = np.full(n, self.dirichlet_alpha, dtype=np.float64)
         chunk = max(1, int(5e7 // max(n, 1)))  # ~400 MB chunks
         delta_samples = np.empty(self.n_samples, dtype=np.float64)
+        theta_A_samples = np.empty(self.n_samples, dtype=np.float64)
+        theta_B_samples = np.empty(self.n_samples, dtype=np.float64)
+        arr_A_f = arr_A.astype(np.float64)
+        arr_B_f = arr_B.astype(np.float64)
         for start in range(0, self.n_samples, chunk):
             stop = min(start + chunk, self.n_samples)
             # rng.dirichlet returns shape (stop-start, n).
             weights = rng.dirichlet(alpha_vec, size=stop - start)
             # Weighted mean differences for every draw in this chunk.
             delta_samples[start:stop] = weights @ differences
+            theta_A_samples[start:stop] = weights @ arr_A_f
+            theta_B_samples[start:stop] = weights @ arr_B_f
 
         # Batched quantiles for the credible interval and trace summary —
         # one partition per probability set rather than four.
@@ -234,10 +256,14 @@ class PairedBayesPropTestBB:
         hdi_lo, hdi_hi = np.quantile(delta_samples, [0.03, 0.97])
 
         self.delta_samples = delta_samples
+        self.theta_A_samples = theta_A_samples
+        self.theta_B_samples = theta_B_samples
         self.summary = PairedSummary(
             mean_delta=float(delta_samples.mean()),
             ci_95=CredibleInterval(lower=float(delta_lo), upper=float(delta_hi)),
             **{"P(A > B)": float((delta_samples > 0).mean())},
+            theta_A_mean=float(arr_A.mean()),
+            theta_B_mean=float(arr_B.mean()),
             # No latent δ_A in the BB model; report posterior-mean Δ on
             # the probability scale instead so the schema stays populated.
             delta_A_posterior_mean=float(delta_samples.mean()),
@@ -401,3 +427,148 @@ class PairedBayesPropTestBB:
         ax.legend(loc="upper right", fontsize=10)
         ax.grid(axis="y", alpha=0.3)
         return ax
+
+    def plot_posteriors(self, **kwargs: Any) -> None:
+        """Overlaid KDE posteriors of θ_A and θ_B (probability scale).
+
+        Each posterior draw uses the Bayesian-bootstrap Dirichlet
+        weights applied to the per-arm binary outcomes.
+
+        Args:
+            **kwargs: Accepts ``figsize`` (default ``(7, 5)``) and
+                ``title`` (default ``"Posterior: θ_A and θ_B"``).
+        """
+        import matplotlib.pyplot as plt
+        from scipy.stats import gaussian_kde
+
+        self._check_fitted()
+        assert self.theta_A_samples is not None
+        assert self.theta_B_samples is not None
+
+        p_A_s = self.theta_A_samples
+        p_B_s = self.theta_B_samples
+
+        figsize = kwargs.pop("figsize", (7, 5))
+        fig, ax = plt.subplots(figsize=figsize)
+
+        kde_A = gaussian_kde(p_A_s)
+        kde_B = gaussian_kde(p_B_s)
+        lo = min(p_A_s.min(), p_B_s.min())
+        hi = max(p_A_s.max(), p_B_s.max())
+        x = np.linspace(max(0, lo - 0.05), min(1, hi + 0.05), 500)
+
+        pdf_A = kde_A(x)
+        pdf_B = kde_B(x)
+        ax.plot(
+            x,
+            pdf_A,
+            color="#2196F3",
+            linewidth=2,
+            label=f"θ_A  mean={p_A_s.mean():.3f}",
+        )
+        ax.fill_between(x, pdf_A, alpha=0.15, color="#2196F3")
+        ax.plot(
+            x,
+            pdf_B,
+            color="#4CAF50",
+            linewidth=2,
+            label=f"θ_B  mean={p_B_s.mean():.3f}",
+        )
+        ax.fill_between(x, pdf_B, alpha=0.15, color="#4CAF50")
+
+        ax.axvline(
+            p_A_s.mean(), color="#2196F3", linestyle="--", linewidth=1, alpha=0.6
+        )
+        ax.axvline(
+            p_B_s.mean(), color="#4CAF50", linestyle="--", linewidth=1, alpha=0.6
+        )
+        ax.set_xlabel("Success probability")
+        ax.set_ylabel("Density")
+        ax.set_title(
+            kwargs.pop("title", "Posterior: θ_A and θ_B"),
+            fontsize=12,
+            fontweight="bold",
+        )
+        ax.legend(fontsize=9)
+        ax.grid(alpha=0.3)
+        plt.tight_layout()
+        plt.show()
+
+    def plot_posterior_delta(self, color: str = "#9C27B0", **kwargs: Any) -> None:
+        """KDE posterior density of Δ = θ_A − θ_B (probability scale) with 95% CI.
+
+        Args:
+            color: Colour for the density curve and fill.
+            **kwargs: Accepts ``figsize`` (default ``(7, 5)``),
+                ``title`` (default ``"Posterior: Δ = θ_A − θ_B"``),
+                ``xlabel``, ``ylabel``.
+        """
+        import matplotlib.pyplot as plt
+        from scipy.stats import gaussian_kde
+
+        self._check_fitted()
+        assert self.delta_samples is not None
+
+        samples = self.delta_samples
+        ci_low, ci_high = np.quantile(samples, [0.025, 0.975])
+        mean_val = float(samples.mean())
+
+        kde = gaussian_kde(samples)
+        x_grid = np.linspace(samples.min() - 0.05, samples.max() + 0.05, 500)
+        density = kde(x_grid)
+
+        figsize = kwargs.pop("figsize", (7, 5))
+        fig, ax = plt.subplots(figsize=figsize)
+        ax.plot(x_grid, density, color=color, linewidth=2)
+        ax.fill_between(x_grid, density, alpha=0.15, color=color)
+        mask = (x_grid >= ci_low) & (x_grid <= ci_high)
+        ax.fill_between(
+            x_grid[mask], density[mask], alpha=0.35, color=color, label="95% CI"
+        )
+        ax.axvline(
+            mean_val,
+            color=color,
+            linestyle="-",
+            linewidth=1.5,
+            alpha=0.8,
+            label=f"Mean = {mean_val:.4f}",
+        )
+        ax.axvline(
+            0,
+            color="gray",
+            linestyle="--",
+            linewidth=1,
+            alpha=0.6,
+            label="Δ = 0 (no difference)",
+        )
+        ax.set_xlabel(kwargs.pop("xlabel", "Δ = θ_A − θ_B"), fontsize=11)
+        ax.set_ylabel(kwargs.pop("ylabel", "Density"), fontsize=11)
+        ax.set_title(
+            kwargs.pop("title", "Posterior: Δ = θ_A − θ_B"),
+            fontsize=12,
+            fontweight="bold",
+        )
+        ax.legend(fontsize=9, loc="upper right")
+        ax.grid(axis="y", alpha=0.3)
+        plt.tight_layout()
+        plt.show()
+
+    def print_summary(self) -> None:
+        """Print a human-readable summary of the fitted model."""
+        self._check_fitted()
+        assert self.summary is not None
+        s = self.summary
+        rope = self.rope_test()
+
+        print("=" * 55)
+        print("  Bayesian Bootstrap — Paired Proportions")
+        print("=" * 55)
+        print(f"  θ_A = {s.theta_A_mean:.4f}")
+        print(f"  θ_B = {s.theta_B_mean:.4f}")
+        print(f"  Mean Δ (θ_A − θ_B) = {s.mean_delta:+.4f}")
+        print(f"  95% CI = [{s.ci_95.lower:.4f}, {s.ci_95.upper:.4f}]")
+        print(f"  P(A > B) = {s.p_A_greater_B:.4f}")
+        print("-" * 55)
+        print(f"  ROPE decision: {rope.decision}")
+        print(f"  % in ROPE: {rope.pct_in_rope:.2%}")
+        print("=" * 55)

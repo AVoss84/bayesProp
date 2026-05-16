@@ -131,9 +131,8 @@ def simulate_nonpaired_scores(
 
 def simulate_paired_scores(
     N: int = 200,
-    mu: float = 0.0,
-    delta_A: float = 0.5,
-    delta_B: float = 0.0,
+    theta_A: float = 0.75,
+    theta_B: float = 0.60,
     sigma_theta: float = 0.0,
     seed: int = 0,
     rng: np.random.Generator | None = None,
@@ -141,7 +140,8 @@ def simulate_paired_scores(
     """Simulate paired binary outcomes from a logistic DGP.
 
     Matches the paired model: ``y_A ~ Bern(σ(μ + δ_A))``,
-    ``y_B ~ Bern(σ(μ))``.
+    ``y_B ~ Bern(σ(μ))``, where ``μ = logit(theta_B)`` and
+    ``δ_A = logit(theta_A) − logit(theta_B)``.
 
     When ``sigma_theta > 0`` each item *i* additionally receives a
     random effect ``ε_i ~ N(0, sigma_theta)`` so that
@@ -149,9 +149,8 @@ def simulate_paired_scores(
 
     Args:
         N: Number of paired observations.
-        mu: Shared logit-scale intercept.
-        delta_A: Logit-scale treatment effect for model A.
-        delta_B: Logit-scale offset for model B (0 by default).
+        theta_A: True success probability for model A.
+        theta_B: True success probability for model B.
         sigma_theta: SD of optional per-item random effects
             (``0`` = fixed effects matching the model).
         seed: Random seed for reproducibility.
@@ -159,22 +158,36 @@ def simulate_paired_scores(
 
     Returns:
         :class:`PairedSimResult` with fields ``y_A``, ``y_B``,
-        ``p_A_true``, ``p_B_true``, ``theta_true``, and ``true_params``.
+        ``theta_A``, ``theta_B``, ``p_A_true``, ``p_B_true``,
+        ``theta_true``, and ``true_params``.
     """
     if rng is None:
         rng = np.random.default_rng(seed)
+
+    mu = float(np.log(theta_B / (1.0 - theta_B)))
+    delta_A = float(np.log(theta_A / (1.0 - theta_A))) - mu
+
     theta_true = mu + rng.normal(0.0, sigma_theta, size=N)
     p_A = _sigmoid(theta_true + delta_A)
-    p_B = _sigmoid(theta_true + delta_B)
+    p_B = _sigmoid(theta_true)
     y_A = rng.binomial(1, p_A)
     y_B = rng.binomial(1, p_B)
     return PairedSimResult(
         y_A=y_A,
         y_B=y_B,
+        theta_A=theta_A,
+        theta_B=theta_B,
         p_A_true=p_A,
         p_B_true=p_B,
         theta_true=theta_true,
-        true_params=PairedTrueParams(N=N, mu=mu, sigma_theta=sigma_theta, delta_A=delta_A, delta_B=delta_B),
+        true_params=PairedTrueParams(
+            N=N,
+            theta_A=theta_A,
+            theta_B=theta_B,
+            mu=mu,
+            delta_A=delta_A,
+            sigma_theta=sigma_theta,
+        ),
     )
 
 
@@ -431,7 +444,9 @@ def _make_nonpaired_generator(
     """
 
     def generator(rng: np.random.Generator, n: int) -> tuple[np.ndarray, np.ndarray]:
-        sim = simulate_nonpaired_scores(N=n, theta_A=theta_A_true, theta_B=theta_B_true, rng=rng)
+        sim = simulate_nonpaired_scores(
+            N=n, theta_A=theta_A_true, theta_B=theta_B_true, rng=rng
+        )
         return sim.y_A, sim.y_B
 
     return generator
@@ -444,10 +459,9 @@ def _make_paired_generator(
 ) -> Callable[[np.random.Generator, int], tuple[np.ndarray, np.ndarray]]:
     """Create a data generator for paired Bernoulli observations.
 
-    Delegates to :func:`simulate_paired_scores`.  ``theta_A_true`` /
-    ``theta_B_true`` are converted to the model's ``(mu, delta_A)``
-    parameterisation: ``mu = logit(theta_B_true)`` and
-    ``delta_A = logit(theta_A_true) - logit(theta_B_true)``.
+    Delegates to :func:`simulate_paired_scores`, which accepts
+    ``theta_A`` / ``theta_B`` on the probability scale and internally
+    converts to the model's ``(mu, delta_A)`` parameterisation.
 
     Note:
         Due to Jensen's inequality the realised marginal rates will
@@ -459,11 +473,15 @@ def _make_paired_generator(
         sigma_theta: SD of optional per-item random effects
             (``0`` = fixed effects matching the model).
     """
-    mu = np.log(theta_B_true / (1.0 - theta_B_true))  # logit(p_B)
-    delta_A = np.log(theta_A_true / (1.0 - theta_A_true)) - mu  # logit(p_A) - logit(p_B)
 
     def generator(rng: np.random.Generator, n: int) -> tuple[np.ndarray, np.ndarray]:
-        sim = simulate_paired_scores(N=n, mu=mu, delta_A=delta_A, sigma_theta=sigma_theta, rng=rng)
+        sim = simulate_paired_scores(
+            N=n,
+            theta_A=theta_A_true,
+            theta_B=theta_B_true,
+            sigma_theta=sigma_theta,
+            rng=rng,
+        )
         return sim.y_A, sim.y_B
 
     return generator
@@ -550,7 +568,9 @@ def _make_decision_fn(
         def _nonpaired_rope(y_A: np.ndarray, y_B: np.ndarray) -> bool:
             from bayesprop.resources.bayes_nonpaired import NonPairedBayesPropTest
 
-            model = NonPairedBayesPropTest(alpha0=alpha0, beta0=beta0, seed=seed).fit(y_A, y_B)
+            model = NonPairedBayesPropTest(alpha0=alpha0, beta0=beta0, seed=seed).fit(
+                y_A, y_B
+            )
             result = model.rope_test(rope=rope, ci_mass=ci_mass)
             return result.decision.startswith("Reject H0")
 
@@ -682,7 +702,9 @@ def bfda_power_curve(
     if design == "nonpaired":
         data_gen = _make_nonpaired_generator(theta_A_true, theta_B_true)
     elif design == "paired":
-        data_gen = _make_paired_generator(theta_A_true, theta_B_true, sigma_theta=sigma_theta)
+        data_gen = _make_paired_generator(
+            theta_A_true, theta_B_true, sigma_theta=sigma_theta
+        )
     else:
         raise ValueError(f"Unknown design: {design!r}. Use 'nonpaired' or 'paired'.")
 
@@ -781,8 +803,12 @@ def plot_bfda_power(
     ps = list(power_curve.values())
 
     ax.plot(ns, ps, "o-", color="#2196F3", linewidth=2, markersize=7)
-    ax.axhline(0.80, color="gray", linestyle="--", linewidth=1, alpha=0.7, label="80% power")
-    ax.axhline(0.95, color="gray", linestyle=":", linewidth=1, alpha=0.7, label="95% power")
+    ax.axhline(
+        0.80, color="gray", linestyle="--", linewidth=1, alpha=0.7, label="80% power"
+    )
+    ax.axhline(
+        0.95, color="gray", linestyle=":", linewidth=1, alpha=0.7, label="95% power"
+    )
 
     n_target = find_n_for_power(power_curve, target_power)
     if n_target is not None:

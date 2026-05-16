@@ -205,17 +205,17 @@ from bayesprop.resources.bayes_paired_pg import PairedBayesPropTestPG, sigmoid
 from bayesprop.resources.bayes_paired_laplace import PairedBayesPropTest
 from bayesprop.utils.utils import simulate_paired_scores
 
-sim = simulate_paired_scores(N=250, delta_A=1.0, sigma_theta=0.0, seed=42)
+sim = simulate_paired_scores(N=250, theta_A=0.73, theta_B=0.50, sigma_theta=0.0, seed=42)
 
 y_A = sim.y_A
 y_B = sim.y_B
 
-print(f"True δ_A = {sim.true_params.delta_A}")
+print(f"True θ_A = {sim.theta_A:.2f},  θ_B = {sim.theta_B:.2f},  Δ = {sim.theta_A - sim.theta_B:.2f}")
 print(f"Fraction y=1:  A={y_A.mean():.1%},  B={y_B.mean():.1%}")
 ```
 
 ```text
-True δ_A = 1.0
+True θ_A = 0.73,  θ_B = 0.50,  Δ = 0.23
 Fraction y=1:  A=72.8%,  B=47.6%
 ```
 

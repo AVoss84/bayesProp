@@ -149,15 +149,21 @@ class PairedTrueParams(BaseModel):
     """True parameters used to generate paired simulation data."""
 
     N: int = Field(..., gt=0, description="Number of paired observations.")
-    mu: float = Field(default=0.0, description="Shared logit-scale intercept.")
+    theta_A: float = Field(
+        ..., ge=0, le=1, description="True success probability for model A."
+    )
+    theta_B: float = Field(
+        ..., ge=0, le=1, description="True success probability for model B."
+    )
+    mu: float = Field(..., description="Logit-scale intercept, logit(theta_B).")
+    delta_A: float = Field(
+        ...,
+        description="Logit-scale treatment effect, logit(theta_A) - logit(theta_B).",
+    )
     sigma_theta: float = Field(
         default=0.0,
         ge=0,
         description="SD of the latent item ability (0 = fixed effects).",
-    )
-    delta_A: float = Field(..., description="Logit-scale treatment effect for model A.")
-    delta_B: float = Field(
-        default=0.0, description="Logit-scale offset for model B (0 by default)."
     )
 
 
@@ -171,6 +177,12 @@ class PairedSimResult(BaseModel):
     )
     y_B: npt.NDArray[np.float64] = Field(
         ..., description="Binary outcomes for model B."
+    )
+    theta_A: float = Field(
+        ..., ge=0, le=1, description="True success probability for model A."
+    )
+    theta_B: float = Field(
+        ..., ge=0, le=1, description="True success probability for model B."
     )
     p_A_true: npt.NDArray[np.float64] = Field(
         ..., description="Item-level probabilities for model A."
@@ -258,6 +270,12 @@ class PairedSummary(BaseModel):
     )
     p_A_greater_B: float = Field(
         ..., alias="P(A > B)", ge=0, le=1, description="P(p_A > p_B)."
+    )
+    theta_A_mean: float = Field(
+        ..., description="Posterior mean of theta_A (probability scale)."
+    )
+    theta_B_mean: float = Field(
+        ..., description="Posterior mean of theta_B (probability scale)."
     )
     delta_A_posterior_mean: float = Field(
         ..., description="Posterior mean of delta_A (logit scale)."

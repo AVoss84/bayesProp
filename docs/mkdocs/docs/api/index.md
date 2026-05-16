@@ -19,11 +19,31 @@ from source code docstrings.
 
 ## Shared decision-rule interface
 
-All three model classes expose the same methods for hypothesis testing:
+All four model classes inherit from `BaseBayesPropTest` and expose the same core workflow:
+
+### Fit → Summarise → Decide
 
 | Method | Return type | Description |
 |--------|-------------|-------------|
+| `model.fit(y_A, y_B)` | `self` | Fit the model to observed data (method chaining) |
+| `model.summary` | `PairedSummary` / `NonPairedSummary` | Posterior summary (θ means, Δ, CI, P(A > B)) |
 | `model.decide(rule=None)` | `HypothesisDecision` | Run BF + P(H₀) + ROPE in a single call |
-| `model.savage_dickey_test(null_value=0.0)` | `SavageDickeyResult` | Savage-Dickey Bayes factor at the null |
-| `Model.posterior_probability_H0(BF_01, prior_H0=0.5)` | `PosteriorProbH0Result` | Static: convert a BF₀₁ to posterior P(H₀ ∣ D) |
 | `model.rope_test(rope=None, ci_mass=0.95)` | `ROPEResult` | ROPE analysis on the difference posterior |
+| `model.print_summary()` | `None` | Print a human-readable summary to stdout |
+
+### Plotting
+
+| Method | Description |
+|--------|-------------|
+| `model.plot_posteriors()` | Single-panel overlay of θ_A and θ_B posteriors |
+| `model.plot_posterior_delta()` | Single-panel KDE of Δ = θ_A − θ_B (probability scale) with 95 % CI |
+
+### Parametric-only methods
+
+The following are available on the three parametric models (`NonPairedBayesPropTest`, `PairedBayesPropTest`, `PairedBayesPropTestPG`) but **not** on the Bayesian bootstrap (`PairedBayesPropTestBB`), which has no parametric prior on Δ:
+
+| Method | Return type | Description |
+|--------|-------------|-------------|
+| `model.savage_dickey_test(null_value=0.0)` | `SavageDickeyResult` | Savage-Dickey Bayes factor at the point null |
+| `Model.posterior_probability_H0(BF_01, prior_H0=0.5)` | `PosteriorProbH0Result` | Static: convert a BF₀₁ to posterior P(H₀ ∣ D) |
+| `model.plot_savage_dickey()` | `None` | Prior vs posterior density with BF annotation |

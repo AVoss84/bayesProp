@@ -42,7 +42,9 @@ def paired_data() -> tuple[np.ndarray, np.ndarray]:
 def fitted_model(paired_data: tuple[np.ndarray, np.ndarray]) -> PairedBayesPropTestPG:
     """Return a fitted PairedBayesPropTestPG model with small MCMC budget."""
     y_a, y_b = paired_data
-    return PairedBayesPropTestPG(seed=42, n_iter=400, burn_in=100, n_chains=2).fit(y_a, y_b)
+    return PairedBayesPropTestPG(seed=42, n_iter=400, burn_in=100, n_chains=2).fit(
+        y_a, y_b
+    )
 
 
 # ── Module-level functions ────────────────────────────────────
@@ -155,11 +157,15 @@ class TestPairedPGFit:
         assert fitted_model.chains.shape[0] == 2  # n_chains
         assert fitted_model.chains.shape[2] == 2  # mu, delta_A
 
-    def test_delta_a_samples_populated(self, fitted_model: PairedBayesPropTestPG) -> None:
+    def test_delta_a_samples_populated(
+        self, fitted_model: PairedBayesPropTestPG
+    ) -> None:
         assert fitted_model.delta_A_samples is not None
         assert len(fitted_model.delta_A_samples) > 0
 
-    def test_trace_summary_is_dataframe(self, fitted_model: PairedBayesPropTestPG) -> None:
+    def test_trace_summary_is_dataframe(
+        self, fitted_model: PairedBayesPropTestPG
+    ) -> None:
         assert isinstance(fitted_model.trace_summary, pd.DataFrame)
 
     def test_binarises_continuous_input(self) -> None:
@@ -171,9 +177,9 @@ class TestPairedPGFit:
         y_a_bin = (scores_A >= 0.5).astype(int)
         y_b_bin = (scores_B >= 0.5).astype(int)
 
-        m = PairedBayesPropTestPG(
-            seed=0, n_iter=300, burn_in=50, n_chains=2
-        ).fit(scores_A, scores_B)
+        m = PairedBayesPropTestPG(seed=0, n_iter=300, burn_in=50, n_chains=2).fit(
+            scores_A, scores_B
+        )
         assert np.array_equal(m.y_A_obs, y_a_bin)
         assert np.array_equal(m.y_B_obs, y_b_bin)
 
@@ -189,7 +195,9 @@ class TestPairedPGFit:
 class TestPairedPGMCMCDiagnostics:
     """Tests for PairedBayesPropTestPG.mcmc_diagnostics()."""
 
-    def test_returns_mcmc_diagnostics(self, fitted_model: PairedBayesPropTestPG) -> None:
+    def test_returns_mcmc_diagnostics(
+        self, fitted_model: PairedBayesPropTestPG
+    ) -> None:
         diag = fitted_model.mcmc_diagnostics()
         assert isinstance(diag, MCMCDiagnostics)
 
@@ -208,7 +216,9 @@ class TestPairedPGMCMCDiagnostics:
 class TestPairedPGSavageDickey:
     """Tests for PairedBayesPropTestPG.savage_dickey_test()."""
 
-    def test_returns_savage_dickey_result(self, fitted_model: PairedBayesPropTestPG) -> None:
+    def test_returns_savage_dickey_result(
+        self, fitted_model: PairedBayesPropTestPG
+    ) -> None:
         result = fitted_model.savage_dickey_test()
         assert isinstance(result, SavageDickeyResult)
 
@@ -221,7 +231,9 @@ class TestPairedPGSavageDickey:
         rng = np.random.default_rng(99)
         y_a = rng.binomial(1, 0.95, size=200)
         y_b = rng.binomial(1, 0.3, size=200)
-        m = PairedBayesPropTestPG(seed=99, n_iter=600, burn_in=100, n_chains=2).fit(y_a, y_b)
+        m = PairedBayesPropTestPG(seed=99, n_iter=600, burn_in=100, n_chains=2).fit(
+            y_a, y_b
+        )
         bf = m.savage_dickey_test()
         assert bf.BF_10 > 3
         assert bf.decision == "Reject H0"
@@ -281,7 +293,9 @@ class TestPairedPGPlots:
 
         plt.close("all")
 
-    def test_print_summary(self, fitted_model: PairedBayesPropTestPG, capsys: pytest.CaptureFixture[str]) -> None:
+    def test_print_summary(
+        self, fitted_model: PairedBayesPropTestPG, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         fitted_model.print_summary()
         captured = capsys.readouterr()
         assert "P(A > B)" in captured.out
@@ -308,7 +322,9 @@ class TestPairedPGRopeTest:
 class TestPairedPGDecide:
     """Tests for PairedBayesPropTestPG.decide method."""
 
-    def test_returns_hypothesis_decision(self, fitted_model: PairedBayesPropTestPG) -> None:
+    def test_returns_hypothesis_decision(
+        self, fitted_model: PairedBayesPropTestPG
+    ) -> None:
         d = fitted_model.decide()
         assert isinstance(d, HypothesisDecision)
 
@@ -381,25 +397,36 @@ class TestPairedPGDGPRecovery:
             (0.5, 0.8, 500),  # non-zero intercept
         ],
     )
-    def test_delta_A_posterior_covers_truth(self, mu: float, delta_A: float, N: int) -> None:
+    def test_delta_A_posterior_covers_truth(
+        self, mu: float, delta_A: float, N: int
+    ) -> None:
         """Logit-scale δ_A posterior samples should cover the true value (95% CI)."""
         from bayesprop.utils.utils import simulate_paired_scores
 
-        sim = simulate_paired_scores(N=N, mu=mu, delta_A=delta_A, seed=42)
-        model = PairedBayesPropTestPG(seed=42, n_iter=2000, burn_in=500, n_chains=4).fit(sim.y_A, sim.y_B)
+        theta_A = sigmoid(mu + delta_A)
+        theta_B = sigmoid(mu)
+        sim = simulate_paired_scores(N=N, theta_A=theta_A, theta_B=theta_B, seed=42)
+        model = PairedBayesPropTestPG(
+            seed=42, n_iter=2000, burn_in=500, n_chains=4
+        ).fit(sim.y_A, sim.y_B)
 
         # CI on the logit-scale δ_A
         lo = float(np.quantile(model.delta_A_samples, 0.025))
         hi = float(np.quantile(model.delta_A_samples, 0.975))
-        assert lo <= delta_A <= hi, f"True δ_A={delta_A:.3f} not in 95% CI [{lo:.3f}, {hi:.3f}]"
+        assert (
+            lo <= delta_A <= hi
+        ), f"True δ_A={delta_A:.3f} not in 95% CI [{lo:.3f}, {hi:.3f}]"
 
     def test_mean_delta_A_close_to_truth(self) -> None:
         """Posterior mean of logit-scale δ_A should be close to the true value."""
         from bayesprop.utils.utils import simulate_paired_scores
 
         delta_A = 0.6
-        sim = simulate_paired_scores(N=500, delta_A=delta_A, seed=99)
-        model = PairedBayesPropTestPG(seed=99, n_iter=2000, burn_in=500, n_chains=4).fit(sim.y_A, sim.y_B)
+        theta_A = sigmoid(delta_A)  # mu=0 → theta_B=0.5
+        sim = simulate_paired_scores(N=500, theta_A=theta_A, theta_B=0.5, seed=99)
+        model = PairedBayesPropTestPG(
+            seed=99, n_iter=2000, burn_in=500, n_chains=4
+        ).fit(sim.y_A, sim.y_B)
 
         assert abs(model.summary.delta_A_posterior_mean - delta_A) < 0.25
 
@@ -407,11 +434,14 @@ class TestPairedPGDGPRecovery:
         """Probability-scale Δ should cover the true value derived from the DGP."""
         from bayesprop.utils.utils import simulate_paired_scores
 
-        mu, delta_A = 0.0, 0.5
-        true_delta_prob = sigmoid(mu + delta_A) - sigmoid(mu)
+        theta_A = sigmoid(0.5)  # mu=0, delta_A=0.5
+        theta_B = 0.5
+        true_delta_prob = theta_A - theta_B
 
-        sim = simulate_paired_scores(N=500, mu=mu, delta_A=delta_A, seed=42)
-        model = PairedBayesPropTestPG(seed=42, n_iter=2000, burn_in=500, n_chains=4).fit(sim.y_A, sim.y_B)
+        sim = simulate_paired_scores(N=500, theta_A=theta_A, theta_B=theta_B, seed=42)
+        model = PairedBayesPropTestPG(
+            seed=42, n_iter=2000, burn_in=500, n_chains=4
+        ).fit(sim.y_A, sim.y_B)
 
         ci = model.summary.ci_95
         assert ci.lower <= true_delta_prob <= ci.upper
@@ -420,8 +450,12 @@ class TestPairedPGDGPRecovery:
         """Under H₀ (δ_A = 0), BF should not reject."""
         from bayesprop.utils.utils import simulate_paired_scores
 
-        sim = simulate_paired_scores(N=300, delta_A=0.0, sigma_theta=2.0, seed=42)
-        model = PairedBayesPropTestPG(seed=42, n_iter=2000, burn_in=500, n_chains=4).fit(sim.y_A, sim.y_B)
+        sim = simulate_paired_scores(
+            N=300, theta_A=0.5, theta_B=0.5, sigma_theta=2.0, seed=42
+        )
+        model = PairedBayesPropTestPG(
+            seed=42, n_iter=2000, burn_in=500, n_chains=4
+        ).fit(sim.y_A, sim.y_B)
         bf = model.savage_dickey_test()
         assert bf.decision == "Fail to reject H0"
 
@@ -429,8 +463,13 @@ class TestPairedPGDGPRecovery:
         """With a large true effect (δ_A=1.5), BF should reject H₀."""
         from bayesprop.utils.utils import simulate_paired_scores
 
-        sim = simulate_paired_scores(N=300, delta_A=1.5, sigma_theta=2.0, seed=42)
-        model = PairedBayesPropTestPG(seed=42, n_iter=2000, burn_in=500, n_chains=4).fit(sim.y_A, sim.y_B)
+        theta_A = sigmoid(1.5)  # mu=0 → delta_A=1.5
+        sim = simulate_paired_scores(
+            N=300, theta_A=theta_A, theta_B=0.5, sigma_theta=2.0, seed=42
+        )
+        model = PairedBayesPropTestPG(
+            seed=42, n_iter=2000, burn_in=500, n_chains=4
+        ).fit(sim.y_A, sim.y_B)
         bf = model.savage_dickey_test()
         assert bf.BF_10 > 10
         assert bf.decision == "Reject H0"
@@ -439,8 +478,10 @@ class TestPairedPGDGPRecovery:
         """R-hat should be close to 1 for a well-behaved DGP with sufficient data."""
         from bayesprop.utils.utils import simulate_paired_scores
 
-        sim = simulate_paired_scores(N=500, delta_A=0.5, seed=42)
-        model = PairedBayesPropTestPG(seed=42, n_iter=2000, burn_in=500, n_chains=4).fit(sim.y_A, sim.y_B)
+        sim = simulate_paired_scores(N=500, theta_A=sigmoid(0.5), theta_B=0.5, seed=42)
+        model = PairedBayesPropTestPG(
+            seed=42, n_iter=2000, burn_in=500, n_chains=4
+        ).fit(sim.y_A, sim.y_B)
 
         diag = model.mcmc_diagnostics()
         assert diag.delta_A.r_hat < 1.1, f"R-hat for δ_A = {diag.delta_A.r_hat:.3f}"
@@ -450,10 +491,20 @@ class TestPairedPGDGPRecovery:
         """PG and Laplace posterior means for δ_A should be within 0.25 of each other."""
         from bayesprop.utils.utils import simulate_paired_scores
 
-        sim = simulate_paired_scores(N=500, delta_A=0.5, seed=42)
+        sim = simulate_paired_scores(N=500, theta_A=sigmoid(0.5), theta_B=0.5, seed=42)
 
-        pg_model = PairedBayesPropTestPG(seed=42, n_iter=2000, burn_in=500, n_chains=4).fit(sim.y_A, sim.y_B)
+        pg_model = PairedBayesPropTestPG(
+            seed=42, n_iter=2000, burn_in=500, n_chains=4
+        ).fit(sim.y_A, sim.y_B)
 
-        laplace_model = PairedBayesPropTest(seed=42, n_samples=10_000).fit(sim.y_A, sim.y_B)
+        laplace_model = PairedBayesPropTest(seed=42, n_samples=10_000).fit(
+            sim.y_A, sim.y_B
+        )
 
-        assert abs(pg_model.summary.delta_A_posterior_mean - laplace_model.summary.delta_A_posterior_mean) < 0.25
+        assert (
+            abs(
+                pg_model.summary.delta_A_posterior_mean
+                - laplace_model.summary.delta_A_posterior_mean
+            )
+            < 0.25
+        )

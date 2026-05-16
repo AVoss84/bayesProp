@@ -31,6 +31,7 @@ import pandas as pd
 from scipy.special import betainc, betaln
 from scipy.stats import gaussian_kde
 
+from bayesprop.resources.base import BaseBayesPropTest
 from bayesprop.resources.data_schemas import (
     BetaParams,
     CredibleInterval,
@@ -175,7 +176,7 @@ def _prior_diff_pdf_at(
     return beta_diff_pdf(null_value, alpha0, beta0, alpha0, beta0, n_grid=n_grid)
 
 
-class NonPairedBayesPropTest:
+class NonPairedBayesPropTest(BaseBayesPropTest):
     """Non-paired Bayesian A/B test using conjugate Beta-Bernoulli model.
 
     Workflow:
@@ -231,6 +232,24 @@ class NonPairedBayesPropTest:
         # eigensolve on every constructor call (dominant cost in tight
         # simulation loops — see _gauss_legendre_unit).
         self._x, self._w = _gauss_legendre_unit(n_quad)
+
+    def __repr__(self) -> str:
+        """Return an informative string representation."""
+        cls = type(self).__name__
+        header = (
+            f"{cls}(n_samples={self.n_samples}, "
+            f"prior=Beta({self.alpha0}, {self.beta0}), seed={self.seed})"
+        )
+        if not hasattr(self, "summary") or self.summary is None:
+            return header
+        s = self.summary
+        return (
+            f"{header}\n"
+            f"  \u03b8_A = {s.theta_A_mean:.4f},  \u03b8_B = {s.theta_B_mean:.4f}\n"
+            f"  Mean \u0394 = {s.mean_delta:+.4f},  "
+            f"95% CI = [{s.ci_95.lower:.4f}, {s.ci_95.upper:.4f}]\n"
+            f"  P(A > B) = {s.p_A_greater_B:.4f}"
+        )
 
     def _binarize(self, y: np.ndarray) -> np.ndarray:
         """Return y unchanged if already binary, else binarize at self.threshold.
@@ -656,26 +675,23 @@ class NonPairedBayesPropTest:
     # ------------------------------------------------------------------ #
 
     def plot_posteriors(self, **kwargs: dict) -> None:
-        """Two-panel plot: overlaid θ_A / θ_B posteriors and Δ = θ_A − θ_B.
+        """Overlaid analytic Beta posteriors of θ_A and θ_B.
 
-        The left panel shows the analytic Beta posterior densities for
-        θ_A and θ_B overlaid in a single axes. The right panel shows the
-        Monte Carlo difference posterior Δ = θ_A − θ_B.
+        Single-panel plot showing the posterior densities for θ_A and θ_B
+        overlaid on the same axes.
 
         Args:
-            **kwargs: Accepts ``figsize`` (default ``(14, 5)``) and
-                ``title`` (default ``"Beta-Bernoulli Posteriors (Non-Paired)"``).
+            **kwargs: Accepts ``figsize`` (default ``(7, 5)``) and
+                ``title`` (default ``"Posterior: θ_A and θ_B"``).
         """
         import matplotlib.pyplot as plt
         from scipy.stats import beta as beta_dist
 
         self._check_fitted()
 
-        figsize = kwargs.pop("figsize", (14, 5))
-        fig, axes = plt.subplots(1, 2, figsize=figsize)
+        figsize = kwargs.pop("figsize", (7, 5))
+        fig, ax = plt.subplots(figsize=figsize)
 
-        # Panel 1: θ_A and θ_B overlaid (analytic Beta densities)
-        ax = axes[0]
         x = np.linspace(0, 1, 500)
         pdf_A = beta_dist.pdf(x, self.a_A, self.b_A)
         pdf_B = beta_dist.pdf(x, self.a_B, self.b_B)
@@ -713,40 +729,13 @@ class NonPairedBayesPropTest:
         )
         ax.set_xlabel("θ")
         ax.set_ylabel("Density")
-        ax.set_title("Beta Posteriors", fontsize=11, fontweight="bold")
-        ax.legend(fontsize=9)
-        ax.grid(alpha=0.3)
-
-        # Panel 2: Δ = θ_A − θ_B
-        ax = axes[1]
-        samples = self.delta_samples
-        ax.hist(
-            samples,
-            bins=60,
-            density=True,
-            alpha=0.6,
-            color="#9C27B0",
-            edgecolor="white",
-        )
-        ax.axvline(0, color="gray", linestyle="--", linewidth=1, alpha=0.6)
-        ax.axvline(
-            samples.mean(),
-            color="#9C27B0",
-            linewidth=1.5,
-            label=f"Mean = {samples.mean():.4f}",
-        )
-        ax.set_xlabel("Δ = θ_A − θ_B")
-        ax.set_ylabel("Density")
-        ax.set_title("Difference Posterior", fontsize=11, fontweight="bold")
-        ax.legend(fontsize=9)
-        ax.grid(alpha=0.3)
-
-        fig.suptitle(
-            kwargs.pop("title", "Beta-Bernoulli Posteriors (Non-Paired)"),
-            fontsize=13,
+        ax.set_title(
+            kwargs.pop("title", "Posterior: θ_A and θ_B"),
+            fontsize=12,
             fontweight="bold",
-            y=1.02,
         )
+        ax.legend(fontsize=9)
+        ax.grid(alpha=0.3)
         plt.tight_layout()
         plt.show()
 

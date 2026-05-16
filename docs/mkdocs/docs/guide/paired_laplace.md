@@ -124,9 +124,9 @@ For exact posterior inference with convergence diagnostics, see
 from bayesprop.resources.bayes_paired_laplace import PairedBayesPropTest
 from bayesprop.utils.utils import simulate_paired_scores
 
-sim = simulate_paired_scores(N=250, delta_A=0.8, sigma_theta=0.0, seed=42)
+sim = simulate_paired_scores(N=250, theta_A=0.69, theta_B=0.50, sigma_theta=0.0, seed=42)
 
-print(f"True δ_A = {sim.true_params.delta_A}")
+print(f"True θ_A = {sim.theta_A:.2f},  θ_B = {sim.theta_B:.2f},  Δ = {sim.theta_A - sim.theta_B:.2f}")
 print(f"Observed rates: A = {sim.y_A.mean():.3f},  B = {sim.y_B.mean():.3f}")
 ```
 
@@ -156,15 +156,16 @@ print(f"Posterior Null: P(H₀|D) = {d.posterior_null.p_H0:.4f}  → {d.posterio
 print(f"ROPE:          {d.rope.decision}  ({d.rope.pct_in_rope:.1%} in ROPE)")
 ```
 
-### 4. Laplace posterior visualisation
+### 4. Posterior visualisation
 
 The Laplace approximation produces a bivariate Gaussian in $(\mu, \delta_A)$.
-Use the built-in method to inspect the implied probability posteriors
+Use the built-in methods to inspect the implied probability posteriors
 $p_A = \sigma(\mu + \delta_A)$, $p_B = \sigma(\mu)$ and their difference
 $\Delta = p_A - p_B$:
 
 ```python
-model.plot_laplace_posterior()
+model.plot_posteriors()       # single-panel overlay of θ_A and θ_B
+model.plot_posterior_delta()   # single-panel Δ = θ_A − θ_B on probability scale
 ```
 
 ![Laplace posterior marginals](../images/paired-laplace/laplace_posterior_marginals.png)
@@ -185,15 +186,7 @@ print(f"Posterior sd: μ={sd_m:.4f}, δ_A={sd_d:.4f}")
 print(f"Correlation: {cov[0, 1] / (sd_m * sd_d):.3f}")
 ```
 
-### 5. Posterior of Delta on the probability scale
-
-```python
-model.plot_posterior_delta()
-```
-
-![Posterior delta KDE](../images/paired-laplace/posterior_delta_A_kde.png)
-
-### 6. Savage-Dickey Bayes Factor plot
+### 5. Savage-Dickey Bayes Factor plot
 
 ```python
 model.plot_savage_dickey()
@@ -201,7 +194,7 @@ model.plot_savage_dickey()
 
 ![Savage-Dickey Bayes factor](../images/paired-laplace/savage_dickey_bf_binomial.png)
 
-### 7. Posterior predictive checks
+### 6. Posterior predictive checks
 
 ```python
 ppc = model.ppc_pvalues(seed=42)

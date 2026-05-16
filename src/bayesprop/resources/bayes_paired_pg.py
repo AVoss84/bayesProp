@@ -36,6 +36,7 @@ from numpy.linalg import solve
 from polyagamma import random_polyagamma
 from scipy.stats import gaussian_kde, norm
 
+from bayesprop.resources.base import BaseBayesPropTest
 from bayesprop.resources.data_schemas import (
     CredibleInterval,
     DecisionRuleType,
@@ -71,7 +72,9 @@ def _format_bf(value: float) -> str:
         return f"{value:.2f}"
 
 
-def _build_design_matrix(y_A: np.ndarray, y_B: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+def _build_design_matrix(
+    y_A: np.ndarray, y_B: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:
     """Stack paired binary outcomes into a design matrix for logistic regression.
 
     Returns:
@@ -86,7 +89,7 @@ def _build_design_matrix(y_A: np.ndarray, y_B: np.ndarray) -> tuple[np.ndarray, 
     return X, y
 
 
-class PairedBayesPropTestPG:
+class PairedBayesPropTestPG(BaseBayesPropTest):
     """Pooled Bernoulli logistic model for paired A/B comparison (PG Gibbs).
 
     Uses Pólya-Gamma data augmentation for exact Gibbs sampling instead
@@ -188,6 +191,24 @@ class PairedBayesPropTestPG:
         self.delta_samples: np.ndarray | None = None
         self.y_A_obs: np.ndarray | None = None
         self.y_B_obs: np.ndarray | None = None
+
+    def __repr__(self) -> str:
+        """Return an informative string representation."""
+        cls = type(self).__name__
+        header = (
+            f"{cls}(n_iter={self.n_iter}, n_chains={self.n_chains}, "
+            f"prior_\u03c3_\u03b4={self.prior_sigma_delta}, seed={self.seed})"
+        )
+        if self.summary is None:
+            return header
+        s = self.summary
+        return (
+            f"{header}\n"
+            f"  \u03b8_A = {s.theta_A_mean:.4f},  \u03b8_B = {s.theta_B_mean:.4f}\n"
+            f"  Mean \u0394 = {s.mean_delta:+.4f},  "
+            f"95% CI = [{s.ci_95.lower:.4f}, {s.ci_95.upper:.4f}]\n"
+            f"  P(A > B) = {s.p_A_greater_B:.4f}"
+        )
 
     # ------------------------------------------------------------------ #
     #  Internal sampler
@@ -296,6 +317,8 @@ class PairedBayesPropTestPG:
                 upper=float(np.quantile(Delta_s, 0.975)),
             ),
             **{"P(A > B)": float((Delta_s > 0).mean())},
+            theta_A_mean=float(pA_s.mean()),
+            theta_B_mean=float(pB_s.mean()),
             delta_A_posterior_mean=float(delta_A_s.mean()),
         )
 
@@ -446,7 +469,9 @@ class PairedBayesPropTestPG:
         )
 
     @staticmethod
-    def posterior_probability_H0(BF_01: float, prior_H0: float = 0.5) -> PosteriorProbH0Result:
+    def posterior_probability_H0(
+        BF_01: float, prior_H0: float = 0.5
+    ) -> PosteriorProbH0Result:
         """Convert BF_01 to posterior probability of H0 (spike-and-slab).
 
         Args:
@@ -532,7 +557,9 @@ class PairedBayesPropTestPG:
         if rule in ("rope", "all"):
             rp = self.rope_test()
 
-        return HypothesisDecision(bayes_factor=bf, posterior_null=pn, rope=rp, rule=rule)
+        return HypothesisDecision(
+            bayes_factor=bf, posterior_null=pn, rope=rp, rule=rule
+        )
 
     # ------------------------------------------------------------------ #
     #  Diagnostics
@@ -647,16 +674,15 @@ class PairedBayesPropTestPG:
         plt.show()
 
     def plot_posteriors(self, **kwargs: Any) -> None:
-        """Two-panel posterior plot: overlaid p_A / p_B and Δ = p_A − p_B.
+        """Overlaid KDE posteriors of θ_A and θ_B (probability scale).
 
-        The implied success probabilities ``p_A = σ(μ + δ_A)`` and
-        ``p_B = σ(μ)`` are computed from the pooled MCMC posterior
-        samples and displayed as overlaid KDE densities in the left
-        panel.  The right panel shows the difference Δ = p_A − p_B.
+        The implied success probabilities ``θ_A = σ(μ + δ_A)`` and
+        ``θ_B = σ(μ)`` are computed from the pooled MCMC posterior
+        samples and displayed as overlaid KDE densities.
 
         Args:
-            **kwargs: Accepts ``figsize`` (default ``(14, 5)``) and
-                ``title`` (default ``"PG Gibbs Posterior (Pooled Binomial)"``).
+            **kwargs: Accepts ``figsize`` (default ``(7, 5)``) and
+                ``title`` (default ``"Posterior: θ_A and θ_B"``).
         """
         import matplotlib.pyplot as plt
 
@@ -666,13 +692,10 @@ class PairedBayesPropTestPG:
         delta_A_s = self.samples[:, 1]
         p_A_s = sigmoid(mu_s + delta_A_s)
         p_B_s = sigmoid(mu_s)
-        Delta_s = p_A_s - p_B_s
 
-        figsize = kwargs.pop("figsize", (14, 5))
-        fig, axes = plt.subplots(1, 2, figsize=figsize)
+        figsize = kwargs.pop("figsize", (7, 5))
+        fig, ax = plt.subplots(figsize=figsize)
 
-        # Panel 1: p_A and p_B overlaid
-        ax = axes[0]
         kde_A = gaussian_kde(p_A_s)
         kde_B = gaussian_kde(p_B_s)
         lo = min(p_A_s.min(), p_B_s.min())
@@ -686,7 +709,7 @@ class PairedBayesPropTestPG:
             pdf_A,
             color="#2196F3",
             linewidth=2,
-            label=f"p_A = σ(μ+δ_A)  mean={p_A_s.mean():.3f}",
+            label=f"θ_A  mean={p_A_s.mean():.3f}",
         )
         ax.fill_between(x, pdf_A, alpha=0.15, color="#2196F3")
         ax.plot(
@@ -694,61 +717,52 @@ class PairedBayesPropTestPG:
             pdf_B,
             color="#4CAF50",
             linewidth=2,
-            label=f"p_B = σ(μ)  mean={p_B_s.mean():.3f}",
+            label=f"θ_B  mean={p_B_s.mean():.3f}",
         )
         ax.fill_between(x, pdf_B, alpha=0.15, color="#4CAF50")
 
-        ax.axvline(p_A_s.mean(), color="#2196F3", linestyle="--", linewidth=1, alpha=0.6)
-        ax.axvline(p_B_s.mean(), color="#4CAF50", linestyle="--", linewidth=1, alpha=0.6)
+        ax.axvline(
+            p_A_s.mean(), color="#2196F3", linestyle="--", linewidth=1, alpha=0.6
+        )
+        ax.axvline(
+            p_B_s.mean(), color="#4CAF50", linestyle="--", linewidth=1, alpha=0.6
+        )
         ax.set_xlabel("Success probability")
         ax.set_ylabel("Density")
-        ax.set_title("Implied Probability Posteriors", fontsize=11, fontweight="bold")
-        ax.legend(fontsize=9)
-        ax.grid(alpha=0.3)
-
-        # Panel 2: Δ = p_A − p_B
-        ax = axes[1]
-        ax.hist(
-            Delta_s,
-            bins=60,
-            density=True,
-            alpha=0.6,
-            color="#9C27B0",
-            edgecolor="white",
-        )
-        ax.axvline(0, color="gray", linestyle="--", linewidth=1, alpha=0.6)
-        ax.axvline(
-            Delta_s.mean(),
-            color="#9C27B0",
-            linewidth=1.5,
-            label=f"Mean = {Delta_s.mean():.4f}",
-        )
-        ax.set_xlabel("Δ = p_A − p_B")
-        ax.set_ylabel("Density")
-        ax.set_title("Difference Posterior", fontsize=11, fontweight="bold")
-        ax.legend(fontsize=9)
-        ax.grid(alpha=0.3)
-
-        fig.suptitle(
-            kwargs.pop("title", "PG Gibbs Posterior (Pooled Binomial)"),
-            fontsize=13,
+        ax.set_title(
+            kwargs.pop("title", "Posterior: θ_A and θ_B"),
+            fontsize=12,
             fontweight="bold",
-            y=1.02,
         )
+        ax.legend(fontsize=9)
+        ax.grid(alpha=0.3)
         plt.tight_layout()
         plt.show()
 
-    def plot_posterior_delta(self, color: str = "#2196F3", **kwargs) -> None:
-        """KDE posterior density of delta_A (logit scale) with 95% CI."""
+    def plot_posterior_delta(self, color: str = "#9C27B0", **kwargs: Any) -> None:
+        """KDE posterior density of Δ = θ_A − θ_B (probability scale) with 95% CI.
+
+        Args:
+            color: Colour for the density curve and fill.
+            **kwargs: Accepts ``figsize`` (default ``(7, 5)``),
+                ``title`` (default ``"Posterior: Δ = θ_A − θ_B"``),
+                ``xlabel``, ``ylabel``.
+        """
         import matplotlib.pyplot as plt
 
         self._check_fitted()
-        samples = self.delta_A_samples
-        ci_low, ci_high = np.quantile(samples, [0.025, 0.975])
-        mean_val = samples.mean()
 
-        kde = gaussian_kde(samples)
-        x_grid = np.linspace(samples.min() - 0.5, samples.max() + 0.5, 500)
+        mu_s = self.samples[:, 0]
+        delta_A_s = self.samples[:, 1]
+        p_A_s = sigmoid(mu_s + delta_A_s)
+        p_B_s = sigmoid(mu_s)
+        Delta_s = p_A_s - p_B_s
+
+        ci_low, ci_high = np.quantile(Delta_s, [0.025, 0.975])
+        mean_val = float(Delta_s.mean())
+
+        kde = gaussian_kde(Delta_s)
+        x_grid = np.linspace(Delta_s.min() - 0.05, Delta_s.max() + 0.05, 500)
         density = kde(x_grid)
 
         figsize = kwargs.pop("figsize", (7, 5))
@@ -756,14 +770,16 @@ class PairedBayesPropTestPG:
         ax.plot(x_grid, density, color=color, linewidth=2)
         ax.fill_between(x_grid, density, alpha=0.15, color=color)
         mask = (x_grid >= ci_low) & (x_grid <= ci_high)
-        ax.fill_between(x_grid[mask], density[mask], alpha=0.35, color=color, label="95% CI")
+        ax.fill_between(
+            x_grid[mask], density[mask], alpha=0.35, color=color, label="95% CI"
+        )
         ax.axvline(
             mean_val,
             color=color,
             linestyle="-",
             linewidth=1.5,
             alpha=0.8,
-            label=f"Mean = {mean_val:.3f}",
+            label=f"Mean = {mean_val:.4f}",
         )
         ax.axvline(
             0,
@@ -771,12 +787,12 @@ class PairedBayesPropTestPG:
             linestyle="--",
             linewidth=1,
             alpha=0.6,
-            label="\u03b4_A = 0 (no difference)",
+            label="Δ = 0 (no difference)",
         )
-        ax.set_xlabel(kwargs.pop("xlabel", "\u03b4_A (logit scale)"), fontsize=11)
+        ax.set_xlabel(kwargs.pop("xlabel", "Δ = θ_A − θ_B"), fontsize=11)
         ax.set_ylabel(kwargs.pop("ylabel", "Density"), fontsize=11)
         ax.set_title(
-            kwargs.pop("title", "Posterior of \u03b4_A (PG Gibbs)"),
+            kwargs.pop("title", "Posterior: Δ = θ_A − θ_B"),
             fontsize=12,
             fontweight="bold",
         )
@@ -950,7 +966,9 @@ class PairedBayesPropTestPG:
         ax.axvline(0, color="gray", linestyle="--", linewidth=1, alpha=0.6)
         ax.set_xlabel("P(perfect)_A \u2212 P(perfect)_B")
         ax.set_ylabel("Density")
-        ax.set_title("PPC: Rate Difference (A \u2212 B)", fontsize=11, fontweight="bold")
+        ax.set_title(
+            "PPC: Rate Difference (A \u2212 B)", fontsize=11, fontweight="bold"
+        )
         ax.legend(fontsize=9)
         ax.grid(alpha=0.3)
 
@@ -973,14 +991,19 @@ class PairedBayesPropTestPG:
 
         s = self.summary
         diag = self.mcmc_diagnostics()
-        verdict = "A wins" if s.p_A_greater_B > 0.95 else ("Tied" if s.p_A_greater_B > 0.5 else "B wins")
+        n_A, n_B = len(self.y_A_obs), len(self.y_B_obs)
+        k_A, k_B = int(self.y_A_obs.sum()), int(self.y_B_obs.sum())
+        verdict = (
+            "A wins"
+            if s.p_A_greater_B > 0.95
+            else ("Tied" if s.p_A_greater_B > 0.5 else "B wins")
+        )
 
-        print("PG Gibbs posterior summary")
+        print("PG Gibbs posterior summary (Paired)")
         print("=" * 60)
-        print(f"  Chains: {self.n_chains}, Iterations: {self.n_iter}, Burn-in: {self.burn_in}")
-        print(f"  Total post-warmup samples: {len(self.delta_A_samples)}")
-        print(f"  \u03b4_A posterior mean:  {s.delta_A_posterior_mean:.4f}")
-        print(f"  Mean \u0394 (prob scale): {s.mean_delta:.4f}")
+        print(f"  \u03b8_A  mean={s.theta_A_mean:.4f}  " f"[n_A={n_A}, k_A={k_A}]")
+        print(f"  \u03b8_B  mean={s.theta_B_mean:.4f}  " f"[n_B={n_B}, k_B={k_B}]")
+        print(f"  Mean \u0394 (\u03b8_A \u2212 \u03b8_B):  {s.mean_delta:.4f}")
         print(f"  95% CI:              [{s.ci_95.lower:.4f}, {s.ci_95.upper:.4f}]")
         print(f"  P(A > B):            {s.p_A_greater_B:.4f}")
         print(f"  Verdict:             {verdict}")
@@ -988,6 +1011,10 @@ class PairedBayesPropTestPG:
         print()
         print("MCMC diagnostics")
         print("=" * 60)
+        print(
+            f"  Chains: {self.n_chains}, Iterations: {self.n_iter}, Burn-in: {self.burn_in}"
+        )
+        print(f"  Total post-warmup samples: {len(self.delta_A_samples)}")
         for name, d in diag.model_dump().items():
             r_hat = d["r_hat"]
             ess = d["ess"]
@@ -996,7 +1023,7 @@ class PairedBayesPropTestPG:
 
         bf = self.savage_dickey_test()
         print()
-        print("Savage-Dickey Bayes Factor: H0 (\u03b4_A = 0) vs H1 (\u03b4_A \u2260 0)")
+        print("Savage-Dickey Bayes Factor: H0 (\u0394 = 0) vs H1 (\u0394 \u2260 0)")
         print("=" * 60)
         print(f"  Prior  density at \u03b4=0: {bf.prior_density_at_0:.6f}")
         print(f"  Post.  density at \u03b4=0: {bf.posterior_density_at_0:.2e}")
@@ -1020,7 +1047,9 @@ class PairedBayesPropTestPG:
         print(f"  {'Statistic':<20} {'Observed':>10} {'p-value':>10} {'Status':>8}")
         print("  " + "-" * 50)
         for stat, vals in ppc.items():
-            print(f"  {stat:<20} {vals.observed:>10.4f} {vals.p_value:>10.3f} {vals.status:>8}")
+            print(
+                f"  {stat:<20} {vals.observed:>10.4f} {vals.p_value:>10.3f} {vals.status:>8}"
+            )
 
         print()
         print("Trace summary")
@@ -1048,14 +1077,19 @@ class PairedBayesPropTestPG:
         ci_highs = [results[m].summary.ci_95.upper for m in metrics]
         probs = [results[m].summary.p_A_greater_B for m in metrics]
 
-        colors = ["#2196F3" if p > 0.95 else "#FF9800" if p > 0.5 else "#F44336" for p in probs]
+        colors = [
+            "#2196F3" if p > 0.95 else "#FF9800" if p > 0.5 else "#F44336"
+            for p in probs
+        ]
         y_pos = np.arange(len(metrics))
 
         figsize = kwargs.pop("figsize", (14, max(4, 2 * len(metrics))))
         fig, axes = plt.subplots(1, 2, figsize=figsize)
 
         ax = axes[0]
-        for i, (m, ci_l, ci_h, col) in enumerate(zip(means, ci_lows, ci_highs, colors, strict=False)):
+        for i, (m, ci_l, ci_h, col) in enumerate(
+            zip(means, ci_lows, ci_highs, colors, strict=False)
+        ):
             ax.plot(
                 [ci_l, ci_h],
                 [i, i],
@@ -1067,7 +1101,9 @@ class PairedBayesPropTestPG:
         ax.axvline(0, color="gray", linestyle="--", linewidth=1, alpha=0.7)
         ax.set_yticks(y_pos)
         ax.set_yticklabels(metrics, fontsize=11)
-        ax.set_xlabel(f"Mean \u0394 P(perfect)\n\u2190 {label_B} better | {label_A} better \u2192")
+        ax.set_xlabel(
+            f"Mean \u0394 P(perfect)\n\u2190 {label_B} better | {label_A} better \u2192"
+        )
         ax.set_title("Posterior Mean Difference with 95% CI", fontweight="bold")
         ax.invert_yaxis()
         ax.grid(axis="x", alpha=0.3)
@@ -1083,7 +1119,9 @@ class PairedBayesPropTestPG:
         ax2.invert_yaxis()
         ax2.grid(axis="x", alpha=0.3)
         for i, p in enumerate(probs):
-            ax2.text(p + 0.02, i, f"{p:.2f}", va="center", fontsize=10, fontweight="bold")
+            ax2.text(
+                p + 0.02, i, f"{p:.2f}", va="center", fontsize=10, fontweight="bold"
+            )
 
         legend_elements = [
             mpatches.Patch(color="#2196F3", label="Strong (P > 0.95)"),
@@ -1115,11 +1153,17 @@ class PairedBayesPropTestPG:
     ) -> None:
         """Print a formatted comparison table across metrics."""
         print("=" * 80)
-        print(f"{'Metric':<25} {'Mean \u0394':>8} {'95% CI':>20} {'P(A>B)':>8} {'Verdict':>12}")
+        print(
+            f"{'Metric':<25} {'Mean \u0394':>8} {'95% CI':>20} {'P(A>B)':>8} {'Verdict':>12}"
+        )
         print("=" * 80)
         for m, model in results.items():
             s = model.summary
-            verdict = "A wins" if s.p_A_greater_B > 0.95 else ("Tied" if s.p_A_greater_B > 0.5 else "B wins")
+            verdict = (
+                "A wins"
+                if s.p_A_greater_B > 0.95
+                else ("Tied" if s.p_A_greater_B > 0.5 else "B wins")
+            )
             print(
                 f"{m:<25} {s.mean_delta:>8.4f} "
                 f"[{s.ci_95.lower:>7.4f}, {s.ci_95.upper:>7.4f}] "

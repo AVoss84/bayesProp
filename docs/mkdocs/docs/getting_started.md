@@ -62,7 +62,7 @@ from bayesprop.resources.bayes_paired_laplace import PairedBayesPropTest
 from bayesprop.utils.utils import simulate_paired_scores
 
 # Simulate paired binary data (y_A[i] and y_B[i] refer to the same item/subject)
-sim = simulate_paired_scores(N=100, delta_A=0.5, seed=42)
+sim = simulate_paired_scores(N=100, theta_A=0.62, theta_B=0.50, seed=42)
 y_A, y_B = sim.y_A, sim.y_B
 
 model = PairedBayesPropTest(seed=42).fit(y_A, y_B)

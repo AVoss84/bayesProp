@@ -64,7 +64,7 @@ paired test:
 ```python
 from bayesprop.utils.utils import mcnemar_paired_test, simulate_paired_scores
 
-sim = simulate_paired_scores(N=200, mu=0.0, delta_A=0.5)
+sim = simulate_paired_scores(N=200, theta_A=0.62, theta_B=0.50)
 freq = mcnemar_paired_test(sim.y_A, sim.y_B)
 print(f"McNemar p = {freq.p_value:.4f},  OR = {freq.odds_ratio}")
 ```

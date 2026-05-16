@@ -381,7 +381,9 @@ class TestPairedLaplaceDGPRecovery:
         """Logit-scale δ_A posterior samples should cover the true value (95% CI)."""
         from bayesprop.utils.utils import simulate_paired_scores
 
-        sim = simulate_paired_scores(N=N, mu=mu, delta_A=delta_A, seed=42)
+        theta_A = sigmoid(mu + delta_A)
+        theta_B = sigmoid(mu)
+        sim = simulate_paired_scores(N=N, theta_A=theta_A, theta_B=theta_B, seed=42)
         model = PairedBayesPropTest(seed=42, n_samples=10_000).fit(sim.y_A, sim.y_B)
 
         # CI on the logit-scale δ_A
@@ -396,7 +398,8 @@ class TestPairedLaplaceDGPRecovery:
         from bayesprop.utils.utils import simulate_paired_scores
 
         delta_A = 0.6
-        sim = simulate_paired_scores(N=500, delta_A=delta_A, seed=99)
+        theta_A = sigmoid(delta_A)  # mu=0 → theta_B=0.5
+        sim = simulate_paired_scores(N=500, theta_A=theta_A, theta_B=0.5, seed=99)
         model = PairedBayesPropTest(seed=99, n_samples=10_000).fit(sim.y_A, sim.y_B)
 
         assert abs(model.summary.delta_A_posterior_mean - delta_A) < 0.25
@@ -405,10 +408,11 @@ class TestPairedLaplaceDGPRecovery:
         """Probability-scale Δ should cover the true value derived from the DGP."""
         from bayesprop.utils.utils import simulate_paired_scores
 
-        mu, delta_A = 0.0, 0.5
-        true_delta_prob = sigmoid(mu + delta_A) - sigmoid(mu)
+        theta_A = sigmoid(0.5)  # mu=0, delta_A=0.5
+        theta_B = 0.5
+        true_delta_prob = theta_A - theta_B
 
-        sim = simulate_paired_scores(N=500, mu=mu, delta_A=delta_A, seed=42)
+        sim = simulate_paired_scores(N=500, theta_A=theta_A, theta_B=theta_B, seed=42)
         model = PairedBayesPropTest(seed=42, n_samples=10_000).fit(sim.y_A, sim.y_B)
 
         ci = model.summary.ci_95
@@ -418,7 +422,9 @@ class TestPairedLaplaceDGPRecovery:
         """Under H₀ (δ_A = 0), BF should not reject."""
         from bayesprop.utils.utils import simulate_paired_scores
 
-        sim = simulate_paired_scores(N=300, delta_A=0.0, sigma_theta=2.0, seed=42)
+        sim = simulate_paired_scores(
+            N=300, theta_A=0.5, theta_B=0.5, sigma_theta=2.0, seed=42
+        )
         model = PairedBayesPropTest(seed=42, n_samples=10_000).fit(sim.y_A, sim.y_B)
         bf = model.savage_dickey_test()
         assert bf.decision == "Fail to reject H0"
@@ -427,7 +433,10 @@ class TestPairedLaplaceDGPRecovery:
         """With a large true effect (δ_A=1.5), BF should reject H₀."""
         from bayesprop.utils.utils import simulate_paired_scores
 
-        sim = simulate_paired_scores(N=300, delta_A=1.5, sigma_theta=2.0, seed=42)
+        theta_A = sigmoid(1.5)  # mu=0 → delta_A=1.5
+        sim = simulate_paired_scores(
+            N=300, theta_A=theta_A, theta_B=0.5, sigma_theta=2.0, seed=42
+        )
         model = PairedBayesPropTest(seed=42, n_samples=10_000).fit(sim.y_A, sim.y_B)
         bf = model.savage_dickey_test()
         assert bf.BF_10 > 10
@@ -438,7 +447,8 @@ class TestPairedLaplaceDGPRecovery:
         from bayesprop.utils.utils import simulate_paired_scores
 
         delta_A = 0.8
-        sim = simulate_paired_scores(N=500, delta_A=delta_A, seed=7)
+        theta_A = sigmoid(delta_A)  # mu=0 → theta_B=0.5
+        sim = simulate_paired_scores(N=500, theta_A=theta_A, theta_B=0.5, seed=7)
         model = PairedBayesPropTest(seed=7, n_samples=10_000).fit(sim.y_A, sim.y_B)
 
         map_delta = model.laplace["map"][1]  # index 1 is delta_A
