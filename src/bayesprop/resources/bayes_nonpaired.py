@@ -991,8 +991,8 @@ class NonPairedBayesPropTest(BaseBayesPropTest):
     @staticmethod
     def plot_forest(
         results: dict[str, "NonPairedBayesPropTest"],
-        label_A: str = "Model A",
-        label_B: str = "Model B",
+        label_A: str = "Group A",
+        label_B: str = "Group B",
         **kwargs: Any,
     ) -> None:
         """Forest plot with P(A > B) bar chart for multiple metrics.
@@ -1565,8 +1565,8 @@ def descriptive_summary(
 
     n_sample = len(np.array(scores_data["metrics"][metric_names[0]]["s_A_raw"]))
     print(f"Paired LLM scores: {model_A} vs {model_B}  (n={n_sample} per model)")
-    print(f"  Model A = {model_A}")
-    print(f"  Model B = {model_B}")
+    print(f"  Group A = {model_A}")
+    print(f"  Group B = {model_B}")
     print("  Δ = A − B")
     print("  BB (τ=x) = Beta-Bernoulli test binarized at threshold τ")
 

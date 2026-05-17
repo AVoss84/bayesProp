@@ -184,6 +184,104 @@ $p(\boldsymbol{\beta} \mid \mathbf{y})$ from the Gibbs sampler
 targets the true posterior — there is no approximation error beyond
 finite MCMC variance.
 
+## Hierarchical model (learned prior scales)
+
+When `hyperprior_mu` and `hyperprior_delta` are set, the model becomes a
+hierarchical logistic regression where the prior variances are themselves
+random variables with Inverse-Gamma hyperpriors:
+
+$$
+\sigma_\mu^2   \sim \mathrm{Inv\text{-}Gamma}(a_\mu,\, b_\mu)
+\qquad
+\sigma_\delta^2 \sim \mathrm{Inv\text{-}Gamma}(a_\delta,\, b_\delta)
+$$
+
+$$
+\mu \sim \mathcal{N}(0,\, \sigma_\mu^2)
+\qquad
+\delta_A \sim \mathcal{N}(0,\, \sigma_\delta^2)
+$$
+
+$$
+y_{A,i} \sim \text{Bernoulli}\bigl(\sigma(\mu + \delta_A)\bigr)
+\qquad
+y_{B,i} \sim \text{Bernoulli}\bigl(\sigma(\mu)\bigr)
+$$
+
+### DAG (hierarchical)
+
+```mermaid
+graph TD
+    a_mu(["a_μ, b_μ"]) --> sigma2_mu["σ²_μ ~ IG"]
+    a_delta(["a_δ, b_δ"]) --> sigma2_delta["σ²_δ ~ IG"]
+
+    sigma2_mu --> mu["μ ~ N(0, σ²_μ)"]
+    sigma2_delta --> delta_A["δ_A ~ N(0, σ²_δ)"]
+
+    mu --> pA["p_A = σ(μ + δ_A)"]
+    delta_A --> pA
+    mu --> pB["p_B = σ(μ)"]
+
+    pA --> yA(["y_A,i"])
+    pB --> yB(["y_B,i"])
+
+    style a_mu fill:#e0e0e0,stroke:#757575
+    style a_delta fill:#e0e0e0,stroke:#757575
+    style sigma2_mu fill:#ffe0b2,stroke:#e65100
+    style sigma2_delta fill:#ffe0b2,stroke:#e65100
+    style mu fill:#bbdefb,stroke:#1565c0
+    style delta_A fill:#bbdefb,stroke:#1565c0
+    style pA fill:#c8e6c9,stroke:#2e7d32
+    style pB fill:#c8e6c9,stroke:#2e7d32
+    style yA fill:#fff9c4,stroke:#f9a825
+    style yB fill:#fff9c4,stroke:#f9a825
+```
+
+<small>**Legend:** grey = fixed hyperparameters, orange = learned hyperparameters,
+blue = latent parameters, green = deterministic, yellow = observed data.</small>
+
+### Extended Gibbs sampler
+
+The Gibbs sampler adds two conjugate Inverse-Gamma updates per iteration.
+Because the IG is the conjugate prior for the variance of a Gaussian, the
+full conditionals are available in closed form:
+
+**Step 3 — Sample $\sigma_\mu^2$:**
+
+$$
+\sigma_\mu^2 \mid \mu \;\sim\; \mathrm{Inv\text{-}Gamma}\!\left(
+  a_\mu + \tfrac{1}{2},\;
+  b_\mu + \tfrac{\mu^2}{2}
+\right)
+$$
+
+**Step 4 — Sample $\sigma_\delta^2$:**
+
+$$
+\sigma_\delta^2 \mid \delta_A \;\sim\; \mathrm{Inv\text{-}Gamma}\!\left(
+  a_\delta + \tfrac{1}{2},\;
+  b_\delta + \tfrac{\delta_A^2}{2}
+\right)
+$$
+
+At each sweep the sampler cycles: PG auxiliaries (Step 1) →
+$\boldsymbol{\beta}$ (Step 2, using the current $\sigma_\mu^2, \sigma_\delta^2$
+in $\mathbf{B}_0^{-1}$) → $\sigma_\mu^2$ (Step 3) → $\sigma_\delta^2$ (Step 4).
+
+### Savage-Dickey Bayes factor (hierarchical)
+
+Under the hierarchical model the marginal prior on $\delta_A$ (after
+integrating out $\sigma_\delta^2$) is a **Student-$t$** distribution:
+
+$$
+\delta_A \sim t_{2a_\delta}\!\left(0,\; \sqrt{\frac{b_\delta}{a_\delta}}\right)
+$$
+
+with $\nu = 2a_\delta$ degrees of freedom and scale
+$s = \sqrt{b_\delta / a_\delta}$.  The Savage-Dickey density ratio
+$BF_{10} = g(0) / p(\delta_A = 0 \mid D)$ therefore uses the Student-$t$
+density at zero instead of the Gaussian prior density.
+
 ## When to use
 
 - **Exact inference** — no approximation error, exact up to MCMC error
@@ -481,6 +579,119 @@ plot_bfda_sensitivity(
 ![BFDA sensitivity (PG Gibbs)](../images/paired-gibbs/bfda_sensitivity_pg_gibbs.png)
 
 See the [BFDA guide](bfda.md) for the full sample-size planning workflow.
+
+## Hierarchical example
+
+The hierarchical variant uses the same `PairedBayesPropTestPG` class — just
+pass `hyperprior_mu` and `hyperprior_delta` (see the
+[hierarchical model](#hierarchical-model-learned-prior-scales) and
+[extended Gibbs sampler](#extended-gibbs-sampler) above).
+
+```python
+from bayesprop.resources.bayes_paired_pg import PairedBayesPropTestPG
+from bayesprop.resources.bayes_paired_laplace import _format_bf
+from bayesprop.utils.utils import simulate_paired_scores
+import numpy as np
+
+sim = simulate_paired_scores(N=250, theta_A=0.69, theta_B=0.50, seed=42)
+
+pg_hier = PairedBayesPropTestPG(
+    seed=42,
+    n_iter=2000,
+    burn_in=500,
+    n_chains=4,
+    hyperprior_mu=(2.0, 1.0),      # IG(2, 1) on σ²_μ
+    hyperprior_delta=(2.0, 1.0),   # IG(2, 1) on σ²_δ
+).fit(sim.y_A, sim.y_B)
+
+pg_hier.print_summary()
+```
+
+### MCMC diagnostics (hierarchical)
+
+The trace plot automatically adds rows for $\sigma_\mu$ and $\sigma_\delta$
+when hyperpriors are active:
+
+```python
+pg_hier.plot_trace(title="MCMC Diagnostics — Hierarchical PG Gibbs")
+```
+
+![MCMC diagnostics — hierarchical PG Gibbs](../images/paired-gibbs/mcmc_diagnostics_hierarchical_pg.png)
+
+### Posterior KDEs
+
+```python
+pg_hier.plot_posteriors(title="Posterior: θ_A and θ_B (Hierarchical PG)")
+```
+
+![Posterior KDEs — hierarchical PG Gibbs](../images/paired-gibbs/posteriors_hierarchical_pg.png)
+
+### Unified decision (hierarchical)
+
+The Savage-Dickey Bayes factor automatically uses the marginal Student-$t$
+prior on $\delta_A$ induced by the IG hyperprior:
+
+```python
+d = pg_hier.decide()
+bf = d.bayes_factor
+
+print(f"BF₁₀ = {_format_bf(bf.BF_10)}  →  {bf.decision}")
+print(f"log₁₀(BF₁₀) = {np.log10(bf.BF_10):.1f}")
+print(f"Posterior Null: P(H₀|D) = {d.posterior_null.p_H0:.4f}  → {d.posterior_null.decision}")
+print(f"ROPE: {d.rope.decision}  ({d.rope.pct_in_rope:.1%} in ROPE)")
+```
+
+### Learned prior scales
+
+The fitted model stores the posterior samples of $\sigma_\mu^2$ and
+$\sigma_\delta^2$:
+
+```python
+sig_mu = np.sqrt(pg_hier.sigma_sq_mu_samples)
+sig_delta = np.sqrt(pg_hier.sigma_sq_delta_samples)
+
+print(f"Learned σ_μ:  mean = {sig_mu.mean():.3f}  "
+      f"95% CI = [{np.quantile(sig_mu, 0.025):.3f}, {np.quantile(sig_mu, 0.975):.3f}]")
+print(f"Learned σ_δ:  mean = {sig_delta.mean():.3f}  "
+      f"95% CI = [{np.quantile(sig_delta, 0.025):.3f}, {np.quantile(sig_delta, 0.975):.3f}]")
+```
+
+```text
+Learned σ_μ:  mean = 0.756  95% CI = [0.398, 1.570]
+Learned σ_δ:  mean = 0.880  95% CI = [0.459, 1.828]
+```
+
+### Fixed vs Hierarchical comparison
+
+```python
+# Fit a fixed-prior model for comparison
+pg_fixed = PairedBayesPropTestPG(seed=42).fit(sim.y_A, sim.y_B)
+
+d_fix = pg_fixed.decide()
+bf_fix = d_fix.bayes_factor
+
+print(f"{'':25} {'Fixed':>18} {'Hierarchical':>18}")
+print("-" * 65)
+print(f"{'Mean Δ (θ_A − θ_B)':25} {pg_fixed.summary.mean_delta:>18.4f} {pg_hier.summary.mean_delta:>18.4f}")
+print(f"{'P(A > B)':25} {pg_fixed.summary.p_A_greater_B:>18.4f} {pg_hier.summary.p_A_greater_B:>18.4f}")
+print(f"{'log₁₀(BF₁₀)':25} {np.log10(bf_fix.BF_10):>18.1f} {np.log10(bf.BF_10):>18.1f}")
+print(f"{'BF₁₀':25} {_format_bf(bf_fix.BF_10):>18} {_format_bf(bf.BF_10):>18}")
+print(f"{'BF Decision':25} {bf_fix.decision:>18} {bf.decision:>18}")
+```
+
+### When to use the hierarchical variant
+
+- You are **unsure about a sensible value for $\sigma_\delta$** and want the
+  data to inform it rather than commit to a fixed slab width.
+- You want a **Bayes factor that is robust** to the prior-sensitivity /
+  Jeffreys–Lindley paradox.
+- You have enough data ($n \gtrsim 50$) for the IG posteriors to concentrate.
+- You want **full posterior uncertainty** on the prior scales (MCMC gives you
+  the entire posterior distribution, not just a MAP point estimate as in the
+  Laplace variant).
+
+For a fixed-prior analysis where you deliberately choose $\sigma_\delta$,
+set `hyperprior_mu=None, hyperprior_delta=None` (the default).
 
 ## Inputs and binarisation
 

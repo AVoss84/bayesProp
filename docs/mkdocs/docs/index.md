@@ -12,6 +12,7 @@ Typical applications include comparing treatments, groups, items, model variants
 ## Features
 
 - **Effect-size inference for proportions** — estimate and test the difference in success rates for both **paired** and **non-paired** samples
+- **Hierarchical logistic regression** — optionally place Inverse-Gamma hyperpriors on the prior variances so the model *learns* the prior scales from data, reducing sensitivity to prior choice (Jeffreys–Lindley robustness)
 - **Savage–Dickey Bayes Factor** — test a point-null hypothesis ($\delta = 0$) without fitting a separate null model
 - **Posterior of the null & ROPE** — quantify the posterior mass inside a Region of Practical Equivalence for nuanced decisions beyond simple reject/accept
 - **Posterior predictive checks** — assess model fit by comparing observed data to data simulated from the posterior
@@ -42,7 +43,7 @@ print(f"ROPE: {d.rope.decision}  ({d.rope.pct_in_rope:.1%} in ROPE)")
 | Model | Module | Design | Inference |
 |-------|--------|--------|-----------|
 | `NonPairedBayesPropTest` | `bayes_nonpaired` | Independent groups | Conjugate Beta-Bernoulli |
-| `PairedBayesPropTest` | `bayes_paired_laplace` | Paired observations | Laplace approximation |
+| `PairedBayesPropTest` | `bayes_paired_laplace` | Paired observations | Laplace approximation (fixed or hierarchical priors) |
 | `PairedBayesPropTestPG` | `bayes_paired_pg` | Paired observations | Pólya-Gamma Gibbs sampler |
 
 ## Navigation

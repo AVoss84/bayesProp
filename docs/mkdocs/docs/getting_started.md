@@ -76,6 +76,20 @@ print(f"ROPE: {d.rope.decision}")
 model.plot_savage_dickey()
 ```
 
+For a **hierarchical** variant that learns the prior scales from data
+(robust to prior misspecification):
+
+```python
+model_h = PairedBayesPropTest(
+    hyperprior_mu=(3.0, 1.0),       # IG(3, 1) on σ²_μ
+    hyperprior_delta=(3.0, 1.0),    # IG(3, 1) on σ²_δ
+    seed=42,
+).fit(y_A, y_B)
+
+model_h.print_summary()
+print(f"Learned σ_δ (MAP) = {model_h.laplace['sigma_delta_map']:.4f}")
+```
+
 For exact MCMC inference with convergence diagnostics:
 
 ```python

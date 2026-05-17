@@ -34,7 +34,7 @@ import numpy.typing as npt
 import pandas as pd
 from numpy.linalg import solve
 from polyagamma import random_polyagamma
-from scipy.stats import gaussian_kde, norm
+from scipy.stats import gaussian_kde, norm, t as student_t
 
 from bayesprop.resources.base import BaseBayesPropTest
 from bayesprop.resources.data_schemas import (
@@ -95,12 +95,26 @@ class PairedBayesPropTestPG(BaseBayesPropTest):
     Uses Pólya-Gamma data augmentation for exact Gibbs sampling instead
     of Laplace approximation.
 
-    Generative model (identical to the Laplace version)::
+    Generative model (fixed priors, default)::
 
         μ      ~ N(0, σ_μ)            (overall intercept)
         δ_A    ~ N(0, σ_δ)            (model-A advantage)
         y_A,i  ~ Bernoulli(σ(μ + δ_A))
         y_B,i  ~ Bernoulli(σ(μ))
+
+    Hierarchical variant (when *hyperprior_mu* and *hyperprior_delta*
+    are supplied)::
+
+        σ²_μ   ~ IG(a_μ, b_μ)
+        σ²_δ   ~ IG(a_δ, b_δ)
+        μ      ~ N(0, σ²_μ)
+        δ_A    ~ N(0, σ²_δ)
+        y_A,i  ~ Bernoulli(σ(μ + δ_A))
+        y_B,i  ~ Bernoulli(σ(μ))
+
+    In the hierarchical case the prior variances are *sampled* from
+    their Inverse-Gamma full conditionals at each Gibbs iteration,
+    yielding exact posterior inference over ``(μ, δ_A, σ²_μ, σ²_δ)``.
 
     Inference proceeds by augmenting with Pólya-Gamma latent variables
     ω_i ~ PG(1, x_i'β), which yields conjugate Gaussian conditionals
@@ -120,6 +134,10 @@ class PairedBayesPropTestPG(BaseBayesPropTest):
             (logit scale).
         y_A_obs: Observed binary scores for model A (set by :meth:`fit`).
         y_B_obs: Observed binary scores for model B (set by :meth:`fit`).
+        sigma_sq_mu_samples: Pooled posterior draws for σ²_μ (hierarchical
+            mode only, ``None`` otherwise).
+        sigma_sq_delta_samples: Pooled posterior draws for σ²_δ (hierarchical
+            mode only, ``None`` otherwise).
     """
 
     def __init__(
@@ -134,14 +152,18 @@ class PairedBayesPropTestPG(BaseBayesPropTest):
         rope_epsilon: float = 0.02,
         threshold: float = 0.5,
         verbose: bool = False,
+        hyperprior_mu: tuple[float, float] | None = None,
+        hyperprior_delta: tuple[float, float] | None = None,
     ) -> None:
         """Initialise model configuration.
 
         Args:
             prior_sigma_delta: Standard deviation of the N(0, σ) prior
-                on ``delta_A`` (logit scale).
+                on ``delta_A`` (logit scale).  When hyperpriors are active
+                this serves as the initial value for σ_δ.
             prior_sigma_mu: Standard deviation of the N(0, σ) prior
-                on ``mu`` (logit scale).
+                on ``mu`` (logit scale).  When hyperpriors are active
+                this serves as the initial value for σ_μ.
             seed: Random seed for reproducibility.
             n_iter: Total Gibbs iterations per chain (including burn-in).
                 The default (``1000``) is calibrated for the paired
@@ -170,7 +192,21 @@ class PairedBayesPropTestPG(BaseBayesPropTest):
                 are left untouched. Defaults to ``0.5``.
             verbose: If ``True``, emit a one-line notice whenever
                 continuous inputs are binarised.
+            hyperprior_mu: ``(a, b)`` shape and scale of an
+                Inverse-Gamma hyperprior on σ²_μ.  When set together
+                with *hyperprior_delta* the model becomes hierarchical
+                and both prior variances are sampled from their IG full
+                conditionals at each Gibbs iteration.
+                ``None`` (default) keeps σ_μ fixed.
+            hyperprior_delta: ``(a, b)`` shape and scale of an
+                Inverse-Gamma hyperprior on σ²_δ.  ``None`` (default)
+                keeps σ_δ fixed at *prior_sigma_delta*.
         """
+        if (hyperprior_mu is None) != (hyperprior_delta is None):
+            raise ValueError(
+                "hyperprior_mu and hyperprior_delta must both be set or both be None."
+            )
+
         self.prior_sigma_delta: float = prior_sigma_delta
         self.prior_sigma_mu: float = prior_sigma_mu
         self.seed: int = seed
@@ -181,6 +217,8 @@ class PairedBayesPropTestPG(BaseBayesPropTest):
         self.rope_epsilon: float = rope_epsilon
         self.threshold: float = threshold
         self.verbose: bool = verbose
+        self.hyperprior_mu: tuple[float, float] | None = hyperprior_mu
+        self.hyperprior_delta: tuple[float, float] | None = hyperprior_delta
 
         # --- Populated by .fit() ---
         self.chains: np.ndarray | None = None
@@ -191,13 +229,17 @@ class PairedBayesPropTestPG(BaseBayesPropTest):
         self.delta_samples: np.ndarray | None = None
         self.y_A_obs: np.ndarray | None = None
         self.y_B_obs: np.ndarray | None = None
+        self.sigma_sq_mu_samples: np.ndarray | None = None
+        self.sigma_sq_delta_samples: np.ndarray | None = None
 
     def __repr__(self) -> str:
         """Return an informative string representation."""
         cls = type(self).__name__
+        mode = "hierarchical" if self.hyperprior_mu is not None else "fixed"
         header = (
             f"{cls}(n_iter={self.n_iter}, n_chains={self.n_chains}, "
-            f"prior_\u03c3_\u03b4={self.prior_sigma_delta}, seed={self.seed})"
+            f"prior_\u03c3_\u03b4={self.prior_sigma_delta}, "
+            f"mode={mode}, seed={self.seed})"
         )
         if self.summary is None:
             return header
@@ -259,12 +301,98 @@ class PairedBayesPropTestPG(BaseBayesPropTest):
 
         return np.array(samples)
 
+    def _run_single_chain_hierarchical(
+        self,
+        X: np.ndarray,
+        y: np.ndarray,
+        rng: np.random.Generator,
+        hp_mu: tuple[float, float],
+        hp_delta: tuple[float, float],
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Run one PG Gibbs chain with Inverse-Gamma hyperpriors on the prior variances.
+
+        At each iteration the sampler performs three conjugate updates:
+
+        1. **PG augmentation + β update** — identical to the fixed-prior
+           case but with the current (sampled) prior precision.
+        2. **σ²_μ | μ** — draw from
+           ``IG(a_μ + 1/2, b_μ + μ²/2)``.
+        3. **σ²_δ | δ_A** — draw from
+           ``IG(a_δ + 1/2, b_δ + δ_A²/2)``.
+
+        Args:
+            X: Design matrix ``(2n, 2)``.
+            y: Stacked binary outcomes ``(2n,)``.
+            rng: NumPy random generator for this chain.
+            hp_mu: ``(a, b)`` shape and scale of the IG hyperprior on σ²_μ.
+            hp_delta: ``(a, b)`` shape and scale of the IG hyperprior on σ²_δ.
+
+        Returns:
+            Tuple ``(beta_samples, sigma_sq_mu_samples, sigma_sq_delta_samples)``
+            where ``beta_samples`` has shape ``(n_iter - burn_in, 2)`` and the
+            variance traces have shape ``(n_iter - burn_in,)``.
+        """
+        n, p = X.shape
+        kappa = y - 0.5
+        a_mu, b_mu = hp_mu
+        a_delta, b_delta = hp_delta
+        b0 = np.zeros(p)
+
+        # Initialise prior variances from the constructor defaults.
+        sigma_sq_mu = self.prior_sigma_mu**2
+        sigma_sq_delta = self.prior_sigma_delta**2
+
+        beta = np.zeros(p)
+        beta_samples: list[np.ndarray] = []
+        sigma_sq_mu_samples: list[float] = []
+        sigma_sq_delta_samples: list[float] = []
+
+        for it in range(self.n_iter):
+            # --- 1. PG augmentation + β | ω, σ²_μ, σ²_δ ---
+            eta = X @ beta
+            omega = random_polyagamma(1.0, eta, random_state=rng)
+
+            B0_inv = np.diag([1.0 / sigma_sq_mu, 1.0 / sigma_sq_delta])
+            A = X.T @ np.diag(omega) @ X + B0_inv
+            rhs = X.T @ kappa + B0_inv @ b0
+            Sigma = solve(A, np.eye(p))
+            mu_post = Sigma @ rhs
+
+            beta = rng.multivariate_normal(mu_post, Sigma)
+
+            # --- 2. σ²_μ | μ  ~  IG(a_μ + 1/2,  b_μ + μ²/2) ---
+            shape_mu = a_mu + 0.5
+            scale_mu = b_mu + 0.5 * beta[0] ** 2
+            sigma_sq_mu = 1.0 / rng.gamma(shape_mu, 1.0 / scale_mu)
+
+            # --- 3. σ²_δ | δ_A  ~  IG(a_δ + 1/2,  b_δ + δ²/2) ---
+            shape_delta = a_delta + 0.5
+            scale_delta = b_delta + 0.5 * beta[1] ** 2
+            sigma_sq_delta = 1.0 / rng.gamma(shape_delta, 1.0 / scale_delta)
+
+            if it >= self.burn_in:
+                beta_samples.append(beta.copy())
+                sigma_sq_mu_samples.append(sigma_sq_mu)
+                sigma_sq_delta_samples.append(sigma_sq_delta)
+
+        return (
+            np.array(beta_samples),
+            np.array(sigma_sq_mu_samples),
+            np.array(sigma_sq_delta_samples),
+        )
+
     # ------------------------------------------------------------------ #
     #  Fitting
     # ------------------------------------------------------------------ #
 
     def fit(self, y_A_obs: np.ndarray, y_B_obs: np.ndarray) -> PairedBayesPropTestPG:
         """Fit the model via PG Gibbs sampling with multiple chains.
+
+        In hierarchical mode (when *hyperprior_mu* and *hyperprior_delta*
+        are set) the prior variances σ²_μ and σ²_δ are sampled from
+        their Inverse-Gamma full conditionals at every Gibbs iteration,
+        giving exact posterior inference over
+        ``(μ, δ_A, σ²_μ, σ²_δ)``.
 
         Args:
             y_A_obs: Observed scores for model A — either binary
@@ -291,11 +419,36 @@ class PairedBayesPropTestPG(BaseBayesPropTest):
         seed_seq = np.random.SeedSequence(self.seed)
         child_seeds = seed_seq.spawn(self.n_chains)
 
-        chain_list = []
-        for i in range(self.n_chains):
-            rng = np.random.default_rng(child_seeds[i])
-            chain_samples = self._run_single_chain(X, y, rng)
-            chain_list.append(chain_samples)
+        hierarchical = self.hyperprior_mu is not None
+
+        if hierarchical:
+            assert self.hyperprior_mu is not None  # noqa: S101
+            assert self.hyperprior_delta is not None  # noqa: S101
+            chain_list: list[np.ndarray] = []
+            sq_mu_chains: list[np.ndarray] = []
+            sq_delta_chains: list[np.ndarray] = []
+            for i in range(self.n_chains):
+                rng = np.random.default_rng(child_seeds[i])
+                beta_s, sq_mu_s, sq_delta_s = self._run_single_chain_hierarchical(
+                    X,
+                    y,
+                    rng,
+                    hp_mu=self.hyperprior_mu,
+                    hp_delta=self.hyperprior_delta,
+                )
+                chain_list.append(beta_s)
+                sq_mu_chains.append(sq_mu_s)
+                sq_delta_chains.append(sq_delta_s)
+            self.sigma_sq_mu_samples = np.concatenate(sq_mu_chains)
+            self.sigma_sq_delta_samples = np.concatenate(sq_delta_chains)
+            # Per-chain arrays for trace / ACF plots.
+            self._variance_chains_mu = np.array(sq_mu_chains)  # (n_chains, n_samples)
+            self._variance_chains_delta = np.array(sq_delta_chains)
+        else:
+            chain_list = []
+            for i in range(self.n_chains):
+                rng = np.random.default_rng(child_seeds[i])
+                chain_list.append(self._run_single_chain(X, y, rng))
 
         self.chains = np.array(chain_list)  # (n_chains, n_samples, 2)
         self.samples = self.chains.reshape(-1, 2)  # pooled
@@ -418,6 +571,11 @@ class PairedBayesPropTestPG(BaseBayesPropTest):
     def savage_dickey_test(self, null_value: float = 0.0) -> SavageDickeyResult:
         """Savage-Dickey density-ratio Bayes factor for H0: delta_A = *null_value*.
 
+        In the fixed-prior case the prior on δ_A is ``N(0, σ_δ)``.
+        In the hierarchical case the marginal prior on δ_A (integrating
+        out σ²_δ) is a Student-*t* with ``ν = 2a_δ`` d.f. and scale
+        ``√(b_δ / a_δ)``.
+
         Args:
             null_value: The point null hypothesis value for delta_A.
 
@@ -429,7 +587,14 @@ class PairedBayesPropTestPG(BaseBayesPropTest):
 
         kde = gaussian_kde(self.delta_A_samples)
         posterior_at_null = float(kde(null_value)[0])
-        prior_at_null = float(norm.pdf(null_value, 0, self.prior_sigma_delta))
+
+        if self.hyperprior_delta is not None:
+            a_d, b_d = self.hyperprior_delta
+            nu = 2.0 * a_d
+            scale = np.sqrt(b_d / a_d)
+            prior_at_null = float(student_t.pdf(null_value, df=nu, loc=0, scale=scale))
+        else:
+            prior_at_null = float(norm.pdf(null_value, 0, self.prior_sigma_delta))
 
         BF_01 = posterior_at_null / prior_at_null
         BF_10 = 1.0 / BF_01 if BF_01 > 0 else float("inf")
@@ -623,21 +788,41 @@ class PairedBayesPropTestPG(BaseBayesPropTest):
     # ------------------------------------------------------------------ #
 
     def plot_trace(self, **kwargs) -> None:
-        """Trace plots and autocorrelation for all chains."""
+        """Trace plots and autocorrelation for all chains.
+
+        In hierarchical mode, additional rows are shown for the learned
+        prior standard deviations σ_μ and σ_δ (plotted on the σ scale,
+        not σ²).
+        """
         import matplotlib.pyplot as plt
 
         self._check_fitted()
-        param_names = ["\u03bc", "\u03b4_A"]
+        hierarchical = self.hyperprior_mu is not None
 
-        figsize = kwargs.pop("figsize", (14, 8))
-        fig, axes = plt.subplots(2, 2, figsize=figsize)
+        # Build list of (name, per-chain array of shape (n_chains, n_samples)).
+        panels: list[tuple[str, np.ndarray]] = [
+            ("\u03bc", self.chains[:, :, 0]),
+            ("\u03b4_A", self.chains[:, :, 1]),
+        ]
+        if hierarchical:
+            # Show on the σ (std-dev) scale for readability.
+            panels.append(("\u03c3_\u03bc", np.sqrt(self._variance_chains_mu)))
+            panels.append(("\u03c3_\u03b4", np.sqrt(self._variance_chains_delta)))
 
-        for row, (name, idx) in enumerate(zip(param_names, [0, 1], strict=True)):
+        n_rows = len(panels)
+        figsize = kwargs.pop("figsize", (14, 4 * n_rows))
+        fig, axes = plt.subplots(n_rows, 2, figsize=figsize)
+        if n_rows == 1:
+            axes = axes[np.newaxis, :]  # ensure 2-D
+
+        max_lag = min(100, self.chains.shape[1] // 2)
+
+        for row, (name, chain_data) in enumerate(panels):
             # Trace plot
             ax = axes[row, 0]
             for c in range(self.n_chains):
                 ax.plot(
-                    self.chains[c, :, idx],
+                    chain_data[c],
                     alpha=0.6,
                     linewidth=0.5,
                     label=f"Chain {c + 1}",
@@ -650,9 +835,8 @@ class PairedBayesPropTestPG(BaseBayesPropTest):
 
             # ACF
             ax2 = axes[row, 1]
-            max_lag = min(100, self.chains.shape[1] // 2)
             for c in range(self.n_chains):
-                x = self.chains[c, :, idx]
+                x = chain_data[c]
                 x = x - x.mean()
                 acf_full = np.correlate(x, x, mode="full")
                 acf_full = acf_full[len(x) - 1 :]
@@ -915,7 +1099,7 @@ class PairedBayesPropTestPG(BaseBayesPropTest):
         )
         ax.set_xlabel("Fraction perfect (y=1)")
         ax.set_ylabel("Density")
-        ax.set_title("PPC: P(perfect) Model A", fontsize=11, fontweight="bold")
+        ax.set_title("PPC: P(perfect) Group A", fontsize=11, fontweight="bold")
         ax.legend(fontsize=9)
         ax.grid(alpha=0.3)
 
@@ -940,7 +1124,7 @@ class PairedBayesPropTestPG(BaseBayesPropTest):
         )
         ax.set_xlabel("Fraction perfect (y=1)")
         ax.set_ylabel("Density")
-        ax.set_title("PPC: P(perfect) Model B", fontsize=11, fontweight="bold")
+        ax.set_title("PPC: P(perfect) Group B", fontsize=11, fontweight="bold")
         ax.legend(fontsize=9)
         ax.grid(alpha=0.3)
 
@@ -1008,6 +1192,25 @@ class PairedBayesPropTestPG(BaseBayesPropTest):
         print(f"  P(A > B):            {s.p_A_greater_B:.4f}")
         print(f"  Verdict:             {verdict}")
 
+        if self.hyperprior_mu is not None:
+            assert self.sigma_sq_mu_samples is not None  # noqa: S101
+            assert self.sigma_sq_delta_samples is not None  # noqa: S101
+            print()
+            print("Learned prior scales (hierarchical)")
+            print("=" * 60)
+            sig_mu = np.sqrt(self.sigma_sq_mu_samples)
+            sig_delta = np.sqrt(self.sigma_sq_delta_samples)
+            print(
+                f"  σ_μ   posterior mean={sig_mu.mean():.4f}  "
+                f"95% CI=[{np.quantile(sig_mu, 0.025):.4f}, "
+                f"{np.quantile(sig_mu, 0.975):.4f}]"
+            )
+            print(
+                f"  σ_δ   posterior mean={sig_delta.mean():.4f}  "
+                f"95% CI=[{np.quantile(sig_delta, 0.025):.4f}, "
+                f"{np.quantile(sig_delta, 0.975):.4f}]"
+            )
+
         print()
         print("MCMC diagnostics")
         print("=" * 60)
@@ -1063,8 +1266,8 @@ class PairedBayesPropTestPG(BaseBayesPropTest):
     @staticmethod
     def plot_forest(
         results: dict[str, "PairedBayesPropTestPG"],
-        label_A: str = "Model A",
-        label_B: str = "Model B",
+        label_A: str = "Group A",
+        label_B: str = "Group B",
         **kwargs,
     ) -> None:
         """Forest plot + P(A>B) bar chart for multiple metrics."""
