@@ -21,6 +21,7 @@ Please check out our [Getting Started](https://avoss84.github.io/bayesProp/getti
 ## Features
 
 - **Effect-size inference for proportions** — estimate and test the difference in success rates for both **paired** and **non-paired** samples
+- **Hierarchical logistic regression** — optionally place Inverse-Gamma hyperpriors on the prior variances so the model *learns* the prior scales from data, reducing sensitivity to prior choice (Jeffreys–Lindley robustness)
 - **Savage–Dickey Bayes Factor** — test a point-null hypothesis ('treatment effect / difference is zero') without fitting a separate null model
 - **Posterior of the null & ROPE** — quantify the posterior mass inside a Region of Practical Equivalence for nuanced decisions beyond simple reject/accept
 - **Posterior predictive checks** — assess model fit by comparing observed data to data simulated from the posterior
@@ -35,6 +36,7 @@ Please check out our [Getting Started](https://avoss84.github.io/bayesProp/getti
 |---|---|---|---|
 | **Non-paired Beta–Bernoulli** | `NonPairedBayesPropTest` | Conjugate Beta posteriors per arm; P(B>A) by quadrature, Δ summaries by Monte Carlo | Independent groups, exact & fast |
 | **Paired Logistic (Laplace)** | `PairedBayesPropTest` | MAP + Laplace approximation | Paired scores, large *n*, fast iteration |
+| **Paired Hierarchical Logistic (Laplace)** | `PairedBayesPropTest` | 4-D MAP + Laplace with Inverse-Gamma hyperpriors on both prior variances | Paired scores, automatic prior-scale learning, robust to prior misspecification |
 | **Paired Logistic (Pólya–Gamma)** | `PairedBayesPropTestPG` | Exact Gibbs sampling | Paired scores, small *n*, exact posterior |
 | **Paired Bayesian Bootstrap** | `PairedBayesPropTestBB` | Nonparametric — Dirichlet weights on the empirical distribution of paired differences | Paired scores, no prior elicitation, robustness to likelihood misspecification (ROPE-driven; no Savage–Dickey BF) |
 

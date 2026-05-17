@@ -31,7 +31,7 @@ from typing import Any, Iterable
 import numpy as np
 import numpy.typing as npt
 import pandas as pd
-from scipy.stats import gaussian_kde, norm
+from scipy.stats import gaussian_kde, norm, t as student_t
 
 from bayesprop.resources.base import BaseBayesPropTest
 from bayesprop.resources.data_schemas import (
@@ -167,11 +167,208 @@ def _paired_laplace_from_counts(
                 break
             step *= 0.5
         mu, delta = new_mu, new_delta
+    else:
+        grad_norm = max(abs(g_mu), abs(g_delta))
+        warnings.warn(
+            f"_paired_laplace_from_counts did not converge in {max_iter} "
+            f"iterations (||∇||_∞ = {grad_norm:.2e}, tol = {tol:.1e}). "
+            "Consider increasing max_iter or relaxing tol.",
+            stacklevel=2,
+        )
 
     H = np.array([[a, c], [c, b]])
     cov = np.array([[b, -c], [-c, a]]) / det
 
     return np.array([mu, delta]), cov, H
+
+
+def _hierarchical_laplace_from_counts(
+    n_A: int,
+    k_A: int,
+    n_B: int,
+    k_B: int,
+    hp_mu: tuple[float, float],
+    hp_delta: tuple[float, float],
+    x0: tuple[float, float, float, float] | None = None,
+    tol: float = 1e-8,
+    max_iter: int = 100,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, float, float]:
+    """Compute the hierarchical Laplace posterior of (μ, δ_A) with learned scales.
+
+    Places Inverse-Gamma hyperpriors on the prior variances::
+
+        σ²_μ  ~ IG(a_μ, b_μ)
+        σ²_δ  ~ IG(a_δ, b_δ)
+        μ     ~ N(0, σ²_μ)
+        δ_A   ~ N(0, σ²_δ)
+
+    Optimisation is performed in the reparameterised space
+    ``(μ, δ_A, ψ_μ, ψ_δ)`` where ``ψ = log σ`` to enforce
+    positivity.  Newton iterations use the closed-form 4×4 gradient
+    and Hessian with Armijo backtracking.
+
+    The marginal posterior on ``(μ, δ_A)`` is extracted from the
+    top-left 2×2 block of the 4×4 Laplace covariance, which already
+    incorporates uncertainty from the learned scales.
+
+    Args:
+        n_A: Cumulative sample size for arm A.
+        k_A: Cumulative successes for arm A.
+        n_B: Cumulative sample size for arm B.
+        k_B: Cumulative successes for arm B.
+        hp_mu: ``(a, b)`` shape and scale of the IG hyperprior on σ²_μ.
+        hp_delta: ``(a, b)`` shape and scale of the IG hyperprior on σ²_δ.
+        x0: Warm-start as ``(μ, δ, log σ_μ, log σ_δ)``.  Defaults to
+            ``(0, 0, log 2, 0)``.
+        tol: Convergence tolerance on the gradient infinity-norm.
+        max_iter: Maximum number of Newton iterations.
+
+    Returns:
+        Tuple ``(theta_map, cov, H, sigma_mu_map, sigma_delta_map)``
+        where ``theta_map`` is the 2-D MAP ``[μ, δ_A]``, ``cov`` is
+        the marginal 2×2 Laplace covariance, ``H`` is the
+        corresponding 2×2 marginal precision, and
+        ``sigma_mu_map`` / ``sigma_delta_map`` are the MAP estimates
+        of the learned prior standard deviations.
+    """
+    a_mu, b_mu = hp_mu
+    a_delta, b_delta = hp_delta
+
+    if x0 is None:
+        x0 = (0.0, 0.0, np.log(2.0), 0.0)
+
+    def neg_log_post(
+        mu_: float, delta_: float, psi_mu_: float, psi_delta_: float
+    ) -> float:
+        """Closed-form negative log-posterior (up to additive constant).
+
+        Evaluated in the reparameterised space ``(μ, δ, ψ_μ, ψ_δ)``
+        where ``ψ = log σ``.  The Jacobian of the log-transform is
+        absorbed into the prior term.
+
+        Args:
+            mu_: Intercept on the logit scale.
+            delta_: Treatment effect on the logit scale.
+            psi_mu_: Log prior standard deviation for μ.
+            psi_delta_: Log prior standard deviation for δ_A.
+
+        Returns:
+            Scalar value of the negative log-posterior.
+        """
+        zA = mu_ + delta_
+        zB = mu_
+        tau_mu_ = np.exp(-2.0 * psi_mu_)
+        tau_delta_ = np.exp(-2.0 * psi_delta_)
+        nll = (
+            k_A * np.logaddexp(0.0, -zA)  # np.log(1 + np.exp(z))
+            + (n_A - k_A) * np.logaddexp(0.0, zA)
+            + k_B * np.logaddexp(0.0, -zB)
+            + (n_B - k_B) * np.logaddexp(0.0, zB)
+        )
+        nlp = (
+            (2.0 * a_mu + 1.0) * psi_mu_
+            + (mu_**2 / 2.0 + b_mu) * tau_mu_
+            + (2.0 * a_delta + 1.0) * psi_delta_
+            + (delta_**2 / 2.0 + b_delta) * tau_delta_
+        )
+        return float(nll + nlp)
+
+    mu, delta = float(x0[0]), float(x0[1])
+    psi_mu, psi_delta = float(x0[2]), float(x0[3])
+
+    for _ in range(max_iter):
+        p_A = 1.0 / (1.0 + np.exp(-(mu + delta)))
+        p_B = 1.0 / (1.0 + np.exp(-mu))
+        w_A = p_A * (1.0 - p_A)
+        w_B = p_B * (1.0 - p_B)
+        tau_mu = np.exp(-2.0 * psi_mu)
+        tau_delta = np.exp(-2.0 * psi_delta)
+
+        r_A = k_A - n_A * p_A
+        r_B = k_B - n_B * p_B
+
+        # 4-D gradient of the negative log-posterior.
+        g = np.array(
+            [
+                -(r_A + r_B) + mu * tau_mu,
+                -r_A + delta * tau_delta,
+                (2.0 * a_mu + 1.0) - (mu**2 + 2.0 * b_mu) * tau_mu,
+                (2.0 * a_delta + 1.0) - (delta**2 + 2.0 * b_delta) * tau_delta,
+            ]
+        )
+
+        if np.max(np.abs(g)) < tol:
+            break
+
+        # 4×4 Hessian of the negative log-posterior.
+        H4 = np.zeros((4, 4))
+        H4[0, 0] = n_A * w_A + n_B * w_B + tau_mu
+        H4[0, 1] = H4[1, 0] = n_A * w_A
+        H4[1, 1] = n_A * w_A + tau_delta
+        H4[0, 2] = H4[2, 0] = -2.0 * mu * tau_mu
+        H4[1, 3] = H4[3, 1] = -2.0 * delta * tau_delta
+        H4[2, 2] = 2.0 * (mu**2 + 2.0 * b_mu) * tau_mu
+        H4[3, 3] = 2.0 * (delta**2 + 2.0 * b_delta) * tau_delta
+
+        # Newton step via dense solve.
+        try:
+            step_dir = np.linalg.solve(H4, -g)
+        except np.linalg.LinAlgError:
+            H4 += 1e-6 * np.eye(4)
+            step_dir = np.linalg.solve(H4, -g)
+
+        # Armijo backtracking line search.
+        old_obj = neg_log_post(mu, delta, psi_mu, psi_delta)
+        directional = float(g @ step_dir)
+        alpha = 1.0
+        for _ in range(20):
+            new_mu = mu + alpha * step_dir[0]
+            new_delta = delta + alpha * step_dir[1]
+            new_psi_mu = psi_mu + alpha * step_dir[2]
+            new_psi_delta = psi_delta + alpha * step_dir[3]
+            if (
+                neg_log_post(new_mu, new_delta, new_psi_mu, new_psi_delta)
+                <= old_obj + 1e-4 * alpha * directional
+            ):
+                break
+            alpha *= 0.5
+        mu, delta = new_mu, new_delta
+        psi_mu, psi_delta = new_psi_mu, new_psi_delta
+    else:
+        grad_norm = float(np.max(np.abs(g)))
+        warnings.warn(
+            f"_hierarchical_laplace_from_counts did not converge in "
+            f"{max_iter} iterations (||∇||_∞ = {grad_norm:.2e}, "
+            f"tol = {tol:.1e}). Consider increasing max_iter or "
+            "relaxing tol.",
+            stacklevel=2,
+        )
+
+    # Recompute Hessian at converged point for the covariance.
+    p_A = 1.0 / (1.0 + np.exp(-(mu + delta)))
+    p_B = 1.0 / (1.0 + np.exp(-mu))
+    w_A = p_A * (1.0 - p_A)
+    w_B = p_B * (1.0 - p_B)
+    tau_mu = np.exp(-2.0 * psi_mu)
+    tau_delta = np.exp(-2.0 * psi_delta)
+
+    H4 = np.zeros((4, 4))
+    H4[0, 0] = n_A * w_A + n_B * w_B + tau_mu
+    H4[0, 1] = H4[1, 0] = n_A * w_A
+    H4[1, 1] = n_A * w_A + tau_delta
+    H4[0, 2] = H4[2, 0] = -2.0 * mu * tau_mu
+    H4[1, 3] = H4[3, 1] = -2.0 * delta * tau_delta
+    H4[2, 2] = 2.0 * (mu**2 + 2.0 * b_mu) * tau_mu
+    H4[3, 3] = 2.0 * (delta**2 + 2.0 * b_delta) * tau_delta
+
+    cov_full = np.linalg.inv(H4)
+    cov_2d = cov_full[:2, :2]
+    H_2d = np.linalg.inv(cov_2d)
+
+    sigma_mu_map = float(np.exp(psi_mu))
+    sigma_delta_map = float(np.exp(psi_delta))
+
+    return np.array([mu, delta]), cov_2d, H_2d, sigma_mu_map, sigma_delta_map
 
 
 class PairedBayesPropTest(BaseBayesPropTest):
@@ -180,18 +377,36 @@ class PairedBayesPropTest(BaseBayesPropTest):
     Uses Laplace approximation (MAP + Hessian) instead of full MCMC
     for fast, analytic posterior inference on binarized scores.
 
-    Generative model::
+    Generative model (fixed priors, default)::
 
         μ      ~ N(0, 2)              (overall intercept)
         δ_A    ~ N(0, σ_δ)            (model-A advantage)
         y_A,i  ~ Bernoulli(σ(μ + δ_A))
         y_B,i  ~ Bernoulli(σ(μ))
 
-    Only 2 parameters — no confounding between item effects and model
-    effect when >90% of pairs are concordant.
+    Hierarchical variant (when *hyperprior_mu* and *hyperprior_delta*
+    are supplied)::
+
+        σ²_μ   ~ IG(a_μ, b_μ)
+        σ²_δ   ~ IG(a_δ, b_δ)
+        μ      ~ N(0, σ²_μ)
+        δ_A    ~ N(0, σ²_δ)
+        y_A,i  ~ Bernoulli(σ(μ + δ_A))
+        y_B,i  ~ Bernoulli(σ(μ))
+
+    In the hierarchical case the prior scales are *learned* from the
+    data via joint MAP optimisation over
+    ``(μ, δ_A, log σ_μ, log σ_δ)``; the Laplace covariance on
+    ``(μ, δ_A)`` is the marginal of the 4-D inverse Hessian and
+    therefore already accounts for hyperparameter uncertainty.
+
+    Only 2 regression parameters — no confounding between item effects
+    and model effect when >90% of pairs are concordant.
 
     The prior width on ``delta_A`` is fixed (not learned) so the
-    Savage-Dickey density ratio remains exactly consistent.
+    Savage-Dickey density ratio remains exactly consistent.  In the
+    hierarchical variant the marginal prior on ``δ_A`` is a scaled
+    Student-*t* (integrated over the IG hyperprior).
 
     Attributes:
         laplace: Dict with MAP estimate, covariance, Hessian, and
@@ -215,12 +430,15 @@ class PairedBayesPropTest(BaseBayesPropTest):
         rope_epsilon: float = 0.02,
         threshold: float = 0.5,
         verbose: bool = False,
+        hyperprior_mu: tuple[float, float] | None = None,
+        hyperprior_delta: tuple[float, float] | None = None,
     ) -> None:
         """Initialise model configuration.
 
         Args:
             prior_sigma_delta: Standard deviation of the N(0, σ) prior on
-                ``delta_A`` (logit scale).
+                ``delta_A`` (logit scale).  When hyperpriors are active
+                this serves as the Newton warm-start for σ_δ.
             seed: Random seed for reproducibility.
             n_samples: Number of draws from the Laplace posterior.
             decision_rule: Default decision framework — one of
@@ -231,7 +449,20 @@ class PairedBayesPropTest(BaseBayesPropTest):
                 left untouched. Defaults to ``0.5``.
             verbose: If ``True``, emit a one-line notice whenever
                 continuous inputs are binarised.
+            hyperprior_mu: ``(a, b)`` shape and scale of an
+                Inverse-Gamma hyperprior on σ²_μ.  When set together
+                with *hyperprior_delta* the model becomes hierarchical
+                and both prior scales are learned from the data.
+                ``None`` (default) keeps σ_μ fixed at 2.0.
+            hyperprior_delta: ``(a, b)`` shape and scale of an
+                Inverse-Gamma hyperprior on σ²_δ.  ``None`` (default)
+                keeps σ_δ fixed at *prior_sigma_delta*.
         """
+        if (hyperprior_mu is None) != (hyperprior_delta is None):
+            raise ValueError(
+                "hyperprior_mu and hyperprior_delta must both be set or both be None."
+            )
+
         self.prior_sigma_delta: float = prior_sigma_delta
         self.seed: int = seed
         self.n_samples: int = n_samples
@@ -239,6 +470,8 @@ class PairedBayesPropTest(BaseBayesPropTest):
         self.rope_epsilon: float = rope_epsilon
         self.threshold: float = threshold
         self.verbose: bool = verbose
+        self.hyperprior_mu: tuple[float, float] | None = hyperprior_mu
+        self.hyperprior_delta: tuple[float, float] | None = hyperprior_delta
 
         # --- Populated by .fit() ---
         self.laplace: dict[str, Any] | None = None
@@ -276,12 +509,22 @@ class PairedBayesPropTest(BaseBayesPropTest):
 
         Reduces ``(y_A_obs, y_B_obs)`` to the four sufficient statistics
         ``(n_A, k_A, n_B, k_B)`` and delegates to
-        :func:`_paired_laplace_from_counts`, which solves for the MAP
-        via damped Newton (closed-form 2x2 gradient and Hessian, with
-        Armijo backtracking line search) and returns the Laplace
-        covariance ``Σ = H⁻¹``.
+        :func:`_paired_laplace_from_counts` (fixed priors) or
+        :func:`_hierarchical_laplace_from_counts` (learned priors).
 
-        Log-posterior (up to constant)::
+        **Fixed-prior mode** (default): solves for the 2-D MAP of
+        ``(μ, δ_A)`` via damped Newton with closed-form gradient
+        and Hessian, returning the Laplace covariance ``Σ = H⁻¹``.
+
+        **Hierarchical mode** (when *hyperprior_mu* and
+        *hyperprior_delta* are set): places Inverse-Gamma hyperpriors
+        on the prior variances and jointly optimises over
+        ``(μ, δ_A, log σ_μ, log σ_δ)`` via 4-D Newton.  The
+        returned 2×2 marginal Laplace covariance on ``(μ, δ_A)`` is
+        the top-left block of the 4×4 ``H⁻¹`` and therefore already
+        incorporates hyperparameter uncertainty.
+
+        Log-posterior (up to constant, fixed-prior case)::
 
             log p(μ, δ|y) = Σᵢ [y_Aᵢ log σ(μ+δ) + (1-y_Aᵢ) log(1-σ(μ+δ))]
                           + Σᵢ [y_Bᵢ log σ(μ)   + (1-y_Bᵢ) log(1-σ(μ))]
@@ -325,13 +568,33 @@ class PairedBayesPropTest(BaseBayesPropTest):
         k_B = int(self.y_B_obs.sum())
 
         # Closed-form MAP + Hessian directly from sufficient statistics.
-        theta_map, cov, H = _paired_laplace_from_counts(
-            n_A=n_A,
-            k_A=k_A,
-            n_B=n_B,
-            k_B=k_B,
-            prior_sigma_delta=self.prior_sigma_delta,
-        )
+        if self.hyperprior_mu is not None:
+            theta_map, cov, H, sigma_mu_map, sigma_delta_map = (
+                _hierarchical_laplace_from_counts(
+                    n_A=n_A,
+                    k_A=k_A,
+                    n_B=n_B,
+                    k_B=k_B,
+                    hp_mu=self.hyperprior_mu,
+                    hp_delta=self.hyperprior_delta,
+                    x0=(
+                        0.0,
+                        0.0,
+                        np.log(2.0),
+                        np.log(self.prior_sigma_delta),
+                    ),
+                )
+            )
+        else:
+            theta_map, cov, H = _paired_laplace_from_counts(
+                n_A=n_A,
+                k_A=k_A,
+                n_B=n_B,
+                k_B=k_B,
+                prior_sigma_delta=self.prior_sigma_delta,
+            )
+            sigma_mu_map = None
+            sigma_delta_map = None
         mu_map, delta_map = float(theta_map[0]), float(theta_map[1])
 
         # Sample from Gaussian posterior
@@ -385,6 +648,9 @@ class PairedBayesPropTest(BaseBayesPropTest):
             "n_B": n_B,
             "k_B": k_B,
             "prior_sigma_delta": self.prior_sigma_delta,
+            "hierarchical": self.hyperprior_mu is not None,
+            "sigma_mu_map": sigma_mu_map,
+            "sigma_delta_map": sigma_delta_map,
         }
 
         return self
@@ -432,10 +698,20 @@ class PairedBayesPropTest(BaseBayesPropTest):
         posterior_at_null = float(
             np.exp(-0.5 * z * z) / (sigma_post * np.sqrt(2.0 * np.pi))
         )
-        prior_at_null = float(
-            np.exp(-0.5 * (null_value / self.prior_sigma_delta) ** 2)
-            / (self.prior_sigma_delta * np.sqrt(2.0 * np.pi))
-        )
+        if self.laplace["hierarchical"]:
+            # Marginal prior on δ_A integrating out σ²_δ ~ IG(a, b)
+            # is a scaled Student-t with ν = 2a d.f. and scale √(b/a).
+            a_d, b_d = self.hyperprior_delta
+            prior_at_null = float(
+                student_t.pdf(
+                    null_value, df=2.0 * a_d, loc=0.0, scale=np.sqrt(b_d / a_d)
+                )
+            )
+        else:
+            prior_at_null = float(
+                np.exp(-0.5 * (null_value / self.prior_sigma_delta) ** 2)
+                / (self.prior_sigma_delta * np.sqrt(2.0 * np.pi))
+            )
 
         BF_01 = posterior_at_null / prior_at_null
         BF_10 = 1.0 / BF_01 if BF_01 > 0 else float("inf")
@@ -950,7 +1226,7 @@ class PairedBayesPropTest(BaseBayesPropTest):
         figsize = kwargs.pop("figsize", (18, 5))
         fig, axes = plt.subplots(1, 3, figsize=figsize)
 
-        # P(perfect) Model A
+        # P(perfect) Group A
         ax = axes[0]
         frac_A_rep = y_A_rep.mean(axis=1)
         frac_A_obs = self.y_A_obs.mean()
@@ -972,11 +1248,11 @@ class PairedBayesPropTest(BaseBayesPropTest):
         )
         ax.set_xlabel("Fraction perfect (y=1)")
         ax.set_ylabel("Density")
-        ax.set_title("PPC: P(perfect) Model A", fontsize=11, fontweight="bold")
+        ax.set_title("PPC: P(perfect) Group A", fontsize=11, fontweight="bold")
         ax.legend(fontsize=9)
         ax.grid(alpha=0.3)
 
-        # P(perfect) Model B
+        # P(perfect) Group B
         ax = axes[1]
         frac_B_rep = y_B_rep.mean(axis=1)
         frac_B_obs = self.y_B_obs.mean()
@@ -998,7 +1274,7 @@ class PairedBayesPropTest(BaseBayesPropTest):
         )
         ax.set_xlabel("Fraction perfect (y=1)")
         ax.set_ylabel("Density")
-        ax.set_title("PPC: P(perfect) Model B", fontsize=11, fontweight="bold")
+        ax.set_title("PPC: P(perfect) Group B", fontsize=11, fontweight="bold")
         ax.legend(fontsize=9)
         ax.grid(alpha=0.3)
 
@@ -1162,6 +1438,12 @@ class PairedBayesPropTest(BaseBayesPropTest):
             f"  Posterior sd: \u03bc={np.sqrt(cov[0, 0]):.4f}, \u03b4_A={np.sqrt(cov[1, 1]):.4f}"
         )
         print(f"  Correlation: {cov[0, 1] / np.sqrt(cov[0, 0] * cov[1, 1]):.3f}")
+        if self.laplace["hierarchical"]:
+            print()
+            print("Learned prior scales (MAP)")
+            print("-" * 60)
+            print(f"  \u03c3_\u03bc = {self.laplace['sigma_mu_map']:.4f}")
+            print(f"  \u03c3_\u03b4 = {self.laplace['sigma_delta_map']:.4f}")
 
         # Savage-Dickey
         bf = self.savage_dickey_test()
@@ -1209,8 +1491,8 @@ class PairedBayesPropTest(BaseBayesPropTest):
     @staticmethod
     def plot_forest(
         results: dict[str, "PairedBayesPropTest"],
-        label_A: str = "Model A",
-        label_B: str = "Model B",
+        label_A: str = "Group A",
+        label_B: str = "Group B",
         **kwargs,
     ) -> None:
         """Forest plot + P(A>B) bar chart for multiple metrics."""
@@ -1634,6 +1916,9 @@ class SequentialPairedBayesPropTest:
             "n_B": self.n_B,
             "k_B": self.successes_B,
             "prior_sigma_delta": self.prior_sigma_delta,
+            "hierarchical": False,
+            "sigma_mu_map": None,
+            "sigma_delta_map": None,
         }
         model.delta_A_samples = delta_A_s
         model.delta_samples = delta_s

@@ -13,6 +13,7 @@ from bayesprop.resources.bayes_paired_laplace import (
     PairedBayesPropTest,
     SequentialPairedBayesPropTest,
     _format_bf,
+    _hierarchical_laplace_from_counts,
     _paired_laplace_from_counts,
     sigmoid,
 )
@@ -731,3 +732,152 @@ class TestSequentialPaired:
             seq.update(ya, yb)
         seq.plot_trajectory()
         plt.close("all")
+
+
+# ── Hierarchical Laplace ─────────────────────────────────────
+
+
+class TestHierarchicalLaplaceInit:
+    """Tests for PairedBayesPropTest with hyperpriors."""
+
+    def test_requires_both_hyperpriors(self) -> None:
+        with pytest.raises(ValueError, match="both be set"):
+            PairedBayesPropTest(hyperprior_mu=(2, 1))
+        with pytest.raises(ValueError, match="both be set"):
+            PairedBayesPropTest(hyperprior_delta=(2, 1))
+
+    def test_accepts_both_hyperpriors(self) -> None:
+        m = PairedBayesPropTest(hyperprior_mu=(2, 1), hyperprior_delta=(2, 1))
+        assert m.hyperprior_mu == (2, 1)
+        assert m.hyperprior_delta == (2, 1)
+
+
+class TestHierarchicalLaplaceFit:
+    """Tests for the hierarchical Laplace fit."""
+
+    @pytest.fixture
+    def hier_model(
+        self, paired_data: tuple[np.ndarray, np.ndarray]
+    ) -> PairedBayesPropTest:
+        y_a, y_b = paired_data
+        return PairedBayesPropTest(
+            seed=42, n_samples=5000, hyperprior_mu=(2, 4), hyperprior_delta=(2, 1)
+        ).fit(y_a, y_b)
+
+    def test_returns_self(self, paired_data: tuple[np.ndarray, np.ndarray]) -> None:
+        y_a, y_b = paired_data
+        m = PairedBayesPropTest(
+            seed=42, n_samples=3000, hyperprior_mu=(2, 4), hyperprior_delta=(2, 1)
+        )
+        assert m.fit(y_a, y_b) is m
+
+    def test_hierarchical_flag_set(self, hier_model: PairedBayesPropTest) -> None:
+        assert hier_model.laplace["hierarchical"] is True
+
+    def test_learned_sigmas_stored(self, hier_model: PairedBayesPropTest) -> None:
+        assert hier_model.laplace["sigma_mu_map"] is not None
+        assert hier_model.laplace["sigma_delta_map"] is not None
+        assert hier_model.laplace["sigma_mu_map"] > 0
+        assert hier_model.laplace["sigma_delta_map"] > 0
+
+    def test_summary_type(self, hier_model: PairedBayesPropTest) -> None:
+        assert isinstance(hier_model.summary, PairedSummary)
+
+    def test_summary_reasonable(self, hier_model: PairedBayesPropTest) -> None:
+        s = hier_model.summary
+        assert -1.0 <= s.mean_delta <= 1.0
+        assert s.ci_95.lower < s.ci_95.upper
+        assert 0.0 <= s.p_A_greater_B <= 1.0
+
+    def test_delta_a_samples_populated(self, hier_model: PairedBayesPropTest) -> None:
+        assert hier_model.delta_A_samples is not None
+        assert len(hier_model.delta_A_samples) == 5000
+
+    def test_cov_is_2x2(self, hier_model: PairedBayesPropTest) -> None:
+        assert hier_model.laplace["cov"].shape == (2, 2)
+
+    def test_map_is_2d(self, hier_model: PairedBayesPropTest) -> None:
+        assert hier_model.laplace["map"].shape == (2,)
+
+    def test_savage_dickey_works(self, hier_model: PairedBayesPropTest) -> None:
+        bf = hier_model.savage_dickey_test()
+        assert isinstance(bf, SavageDickeyResult)
+        assert abs(bf.BF_01 * bf.BF_10 - 1.0) < 0.01
+
+    def test_decide_works(self, hier_model: PairedBayesPropTest) -> None:
+        d = hier_model.decide()
+        assert isinstance(d, HypothesisDecision)
+        assert d.bayes_factor is not None
+        assert d.rope is not None
+
+    def test_print_summary_shows_learned_scales(
+        self, hier_model: PairedBayesPropTest, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        hier_model.print_summary()
+        captured = capsys.readouterr()
+        assert "Learned prior scales" in captured.out
+        assert "\u03c3_\u03bc" in captured.out
+        assert "\u03c3_\u03b4" in captured.out
+
+    def test_strong_effect_detected(self) -> None:
+        rng = np.random.default_rng(99)
+        y_a = rng.binomial(1, 0.9, size=200)
+        y_b = rng.binomial(1, 0.4, size=200)
+        m = PairedBayesPropTest(
+            seed=99,
+            n_samples=5000,
+            hyperprior_mu=(2, 4),
+            hyperprior_delta=(2, 1),
+        ).fit(y_a, y_b)
+        assert m.summary.p_A_greater_B > 0.95
+        bf = m.savage_dickey_test()
+        assert bf.decision == "Reject H0"
+
+
+class TestHierarchicalLaplaceFromCounts:
+    """Tests for the _hierarchical_laplace_from_counts helper."""
+
+    def test_returns_correct_shapes(self) -> None:
+        theta, cov, H, s_mu, s_delta = _hierarchical_laplace_from_counts(
+            n_A=100, k_A=70, n_B=100, k_B=50, hp_mu=(2, 4), hp_delta=(2, 1)
+        )
+        assert theta.shape == (2,)
+        assert cov.shape == (2, 2)
+        assert H.shape == (2, 2)
+        assert s_mu > 0
+        assert s_delta > 0
+
+    def test_cov_inverse_of_H(self) -> None:
+        """Marginal H and cov should be inverses of each other."""
+        _, cov, H, _, _ = _hierarchical_laplace_from_counts(
+            n_A=100, k_A=70, n_B=100, k_B=50, hp_mu=(2, 4), hp_delta=(2, 1)
+        )
+        assert (H @ cov) == pytest.approx(np.eye(2), abs=1e-8)
+
+    def test_warm_start_converges(self) -> None:
+        theta_a, _, _, _, _ = _hierarchical_laplace_from_counts(
+            n_A=80, k_A=60, n_B=80, k_B=45, hp_mu=(2, 4), hp_delta=(2, 1)
+        )
+        theta_b, _, _, _, _ = _hierarchical_laplace_from_counts(
+            n_A=80,
+            k_A=60,
+            n_B=80,
+            k_B=45,
+            hp_mu=(2, 4),
+            hp_delta=(2, 1),
+            x0=(float(theta_a[0]), float(theta_a[1]), np.log(2.0), 0.0),
+        )
+        assert theta_a == pytest.approx(theta_b, abs=1e-4)
+
+    def test_learned_sigma_delta_near_fixed_with_tight_hyperprior(self) -> None:
+        """Very tight IG hyperprior should recover near-fixed sigma."""
+        # IG(1000, 1000) has mean=1.001 and very small variance.
+        _, _, _, _, s_delta = _hierarchical_laplace_from_counts(
+            n_A=200,
+            k_A=140,
+            n_B=200,
+            k_B=100,
+            hp_mu=(1000, 4000),
+            hp_delta=(1000, 1000),
+        )
+        assert abs(s_delta - 1.0) < 0.1

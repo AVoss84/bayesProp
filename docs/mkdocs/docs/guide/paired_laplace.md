@@ -3,10 +3,21 @@
 ## Overview
 
 The paired model is used when **both** conditions are evaluated on the **same**
-items or subjects. It uses a pooled Bernoulli logistic regression with a Laplace
+items or subjects. It uses a Bernoulli logistic regression with a Laplace
 approximation (MAP + analytical Hessian) for fast, analytic posterior inference.
 
+Two modes are supported:
+
+- **Fixed priors (default)** — the prior scales $\sigma_\mu$ and $\sigma_\delta$
+  are user-chosen constants. The MAP is found by a 2-D Newton solver.
+- **Hierarchical (learned scales)** — Inverse-Gamma hyperpriors are placed on
+  $\sigma_\mu^2$ and $\sigma_\delta^2$, so the prior widths are learned from
+  data via a 4-D Newton solver. This makes the Savage–Dickey Bayes factor
+  robust to the Jeffreys–Lindley paradox.
+
 ## Generative model
+
+### Fixed priors (default)
 
 $$
 \mu \sim \mathcal{N}(0, \sigma_\mu) \qquad
@@ -22,7 +33,7 @@ where $\sigma(x) = 1/(1 + e^{-x})$ is the logistic sigmoid function.
 The parameter $\delta_A$ captures group A's advantage on the logit scale;
 $\mu$ is the shared baseline log-odds.
 
-### Directed Acyclic Graph (DAG)
+#### DAG (fixed priors)
 
 ```mermaid
 graph TD
@@ -46,66 +57,260 @@ graph TD
     style yB fill:#fff9c4,stroke:#f9a825
 ```
 
-<small>**Legend:** grey = hyperparameters, blue = latent parameters, green = deterministic,
+<small>**Legend:** grey = fixed hyperparameters, blue = latent parameters, green = deterministic,
 yellow = observed data.</small>
+
+### Hierarchical logistic regression (learned scales)
+
+When `hyperprior_mu` and `hyperprior_delta` are set, the model becomes a
+hierarchical logistic regression where the prior variances are themselves
+random variables:
+
+$$
+\sigma_\mu^2   \sim \mathrm{Inv\text{-}Gamma}(a_\mu,\, b_\mu)
+\qquad
+\sigma_\delta^2 \sim \mathrm{Inv\text{-}Gamma}(a_\delta,\, b_\delta)
+$$
+
+$$
+\mu \sim \mathcal{N}(0,\, \sigma_\mu^2)
+\qquad
+\delta_A \sim \mathcal{N}(0,\, \sigma_\delta^2)
+$$
+
+$$
+y_{A,i} \sim \text{Bernoulli}\bigl(\sigma(\mu + \delta_A)\bigr)
+\qquad
+y_{B,i} \sim \text{Bernoulli}\bigl(\sigma(\mu)\bigr)
+$$
+
+#### DAG (hierarchical)
+
+```mermaid
+graph TD
+    a_mu(["a_μ, b_μ"]) --> sigma2_mu["σ²_μ ~ IG"]
+    a_delta(["a_δ, b_δ"]) --> sigma2_delta["σ²_δ ~ IG"]
+
+    sigma2_mu --> mu["μ ~ N(0, σ²_μ)"]
+    sigma2_delta --> delta_A["δ_A ~ N(0, σ²_δ)"]
+
+    mu --> pA["p_A = σ(μ + δ_A)"]
+    delta_A --> pA
+    mu --> pB["p_B = σ(μ)"]
+
+    pA --> yA(["y_A,i"])
+    pB --> yB(["y_B,i"])
+
+    style a_mu fill:#e0e0e0,stroke:#757575
+    style a_delta fill:#e0e0e0,stroke:#757575
+    style sigma2_mu fill:#ffe0b2,stroke:#e65100
+    style sigma2_delta fill:#ffe0b2,stroke:#e65100
+    style mu fill:#bbdefb,stroke:#1565c0
+    style delta_A fill:#bbdefb,stroke:#1565c0
+    style pA fill:#c8e6c9,stroke:#2e7d32
+    style pB fill:#c8e6c9,stroke:#2e7d32
+    style yA fill:#fff9c4,stroke:#f9a825
+    style yB fill:#fff9c4,stroke:#f9a825
+```
+
+<small>**Legend:** grey = fixed hyperparameters, orange = learned hyperparameters,
+blue = latent parameters, green = deterministic, yellow = observed data.</small>
 
 ## Laplace approximation
 
-The Laplace method approximates the posterior as a bivariate Gaussian centred
+The Laplace method approximates the posterior as a multivariate Gaussian centred
 at the MAP (maximum a posteriori) estimate:
 
 $$
-p(\mathbf{\theta} \mid y) \;\approx\; \mathcal{N}\!\bigl(\hat{\mathbf{\theta}}_{\text{MAP}},\; \mathbf{H}^{-1}\bigr)
+p(\boldsymbol{\theta} \mid y) \;\approx\; \mathcal{N}\!\bigl(\hat{\boldsymbol{\theta}}_{\text{MAP}},\; \mathbf{H}^{-1}\bigr)
 $$
 
 where $\mathbf{H}$ is the Hessian of the negative log-posterior evaluated at the MAP.
 
-### Log-posterior
+### Fixed-prior case (2-D)
 
-Let $\mathbf{\theta} = (\mu, \delta_A)^\top$ denote the parameter vector. The log-posterior is
+#### Log-posterior
+
+Let $\boldsymbol{\theta} = (\mu, \delta_A)^\top$ denote the parameter vector. The log-posterior is
 
 $$
-\log p(\mathbf{\theta} \mid y) = \sum_i \bigl[y_{A,i} \log p_A + (1 - y_{A,i}) \log(1 - p_A)\bigr]
+\log p(\boldsymbol{\theta} \mid y) = \sum_i \bigl[y_{A,i} \log p_A + (1 - y_{A,i}) \log(1 - p_A)\bigr]
 + \sum_i \bigl[y_{B,i} \log p_B + (1 - y_{B,i}) \log(1 - p_B)\bigr]
 - \frac{\mu^2}{2\sigma_\mu^2} - \frac{\delta_A^2}{2\sigma_\delta^2}
 $$
 
 with $p_A = \sigma(\mu + \delta_A)$ and $p_B = \sigma(\mu)$.
 
-### Gradient
+#### Gradient
 
 $$
-\frac{\partial \log p(\mathbf{\theta} \mid y)}{\partial \mu} = (k_A - n \cdot p_A) + (k_B - n \cdot p_B) - \frac{\mu}{\sigma_\mu^2}
+\frac{\partial \log p(\boldsymbol{\theta} \mid y)}{\partial \mu} = (k_A - n_A \cdot p_A) + (k_B - n_B \cdot p_B) - \frac{\mu}{\sigma_\mu^2}
 $$
 
 $$
-\frac{\partial \log p(\mathbf{\theta} \mid y)}{\partial \delta_A} = (k_A - n \cdot p_A) - \frac{\delta_A}{\sigma_\delta^2}
+\frac{\partial \log p(\boldsymbol{\theta} \mid y)}{\partial \delta_A} = (k_A - n_A \cdot p_A) - \frac{\delta_A}{\sigma_\delta^2}
 $$
 
 where $k_A = \sum y_{A,i}$ and $k_B = \sum y_{B,i}$.
 
-### Hessian of negative log-posterior
+#### Hessian of negative log-posterior
 
 $$
-H_{00} = n \cdot w_A + n \cdot w_B + \frac{1}{\sigma_\mu^2}, \qquad
-H_{11} = n \cdot w_A + \frac{1}{\sigma_\delta^2}, \qquad
-H_{01} = H_{10} = n \cdot w_A
+H_{00} = n_A w_A + n_B w_B + \frac{1}{\sigma_\mu^2}, \qquad
+H_{11} = n_A w_A + \frac{1}{\sigma_\delta^2}, \qquad
+H_{01} = H_{10} = n_A w_A
 $$
 
 where $w_A = p_A(1 - p_A)$ and $w_B = p_B(1 - p_B)$, evaluated at the MAP.
 
-### Solver
+#### Solver
 
-The MAP is found by **damped Newton iteration** in 2D using the closed-form
-gradient and Hessian above (no external optimizer is invoked). Each step
-solves the $2\times 2$ system $\mathbf{H}\,\Delta\boldsymbol{\theta} = -\nabla(-\log p)$
-in closed form via the cofactor inverse, and an Armijo backtracking line
-search guarantees monotone descent even from a poor starting point.
+The MAP is found by **damped Newton iteration** in 2-D using the closed-form
+gradient and Hessian above (no external optimizer is invoked).
+Unlike gradient descent, which only uses the gradient, Newton's method also
+uses the **Hessian** (second-derivative curvature) to compute the optimal
+step direction and size:
+
+$$
+\boldsymbol{\theta}_{t+1} = \boldsymbol{\theta}_t - \mathbf{H}^{-1}\,\nabla f
+$$
+
+This solves the linear system
+$\mathbf{H}\,\Delta\boldsymbol{\theta} = -\nabla f$ for the Newton step
+$\Delta\boldsymbol{\theta}$. Because it accounts for curvature, Newton
+converges **quadratically** (the error squares each iteration) near the
+optimum, while gradient descent only converges linearly.
+
+In the 2-D case the $2\times 2$ system is solved in closed form via the
+cofactor inverse, and an Armijo backtracking line search guarantees monotone
+descent even from a poor starting point.
 
 Because the negative log-posterior is strictly convex (Gaussian priors plus
-Bernoulli likelihood), Newton converges quadratically. The
-:class:`SequentialPairedBayesPropTest` warm-starts each look from the
+Bernoulli likelihood), convergence is guaranteed. The
+`SequentialPairedBayesPropTest` warm-starts each look from the
 previous MAP, which typically requires only **1–3 iterations** per update.
+A warning is emitted if `max_iter` is reached without convergence.
+
+### Hierarchical case (4-D)
+
+When Inverse-Gamma hyperpriors are placed on $\sigma_\mu^2$ and $\sigma_\delta^2$,
+the optimisation is lifted to a 4-D reparameterised space.
+
+#### Reparameterisation
+
+To enforce positivity of $\sigma_\mu$ and $\sigma_\delta$ we optimise in the
+log-scale parameterisation $\psi_\mu = \log \sigma_\mu$ and
+$\psi_\delta = \log \sigma_\delta$.
+The Jacobian of the transform is absorbed into the log-posterior, giving the
+4-D parameter vector $\boldsymbol{\phi} = (\mu,\, \delta_A,\, \psi_\mu,\, \psi_\delta)^\top$.
+
+#### 4-D negative log-posterior
+
+Using the precision $\tau = e^{-2\psi}$ (since $\psi = \log\sigma$ implies
+$\sigma^2 = e^{2\psi}$, so $\tau = 1/\sigma^2 = e^{-2\psi}$) and writing
+the Inverse-Gamma log-density on the $\psi$-scale:
+
+$$
+-\log p(\boldsymbol{\phi} \mid y) \;=\;
+\underbrace{
+  k_A \log(1 + e^{-z_A}) + (n_A - k_A)\log(1 + e^{z_A})
+  + k_B \log(1 + e^{-z_B}) + (n_B - k_B)\log(1 + e^{z_B})
+}_{\text{neg log-likelihood}}
+$$
+
+$$
+\;+\;
+\underbrace{
+  (2a_\mu + 1)\,\psi_\mu + \bigl(\tfrac{\mu^2}{2} + b_\mu\bigr)\,\tau_\mu
+  + (2a_\delta + 1)\,\psi_\delta + \bigl(\tfrac{\delta_A^2}{2} + b_\delta\bigr)\,\tau_\delta
+}_{\text{neg log-prior (IG + Gaussian + Jacobian)}}
+$$
+
+where $z_A = \mu + \delta_A$, $z_B = \mu$, $\tau_\mu = e^{-2\psi_\mu}$,
+$\tau_\delta = e^{-2\psi_\delta}$.
+
+#### 4-D gradient
+
+$$
+\nabla_\mu = -(r_A + r_B) + \mu\,\tau_\mu
+\qquad
+\nabla_{\delta_A} = -r_A + \delta_A\,\tau_\delta
+$$
+
+$$
+\nabla_{\psi_\mu} = (2a_\mu + 1) - (\mu^2 + 2b_\mu)\,\tau_\mu
+\qquad
+\nabla_{\psi_\delta} = (2a_\delta + 1) - (\delta_A^2 + 2b_\delta)\,\tau_\delta
+$$
+
+where $r_A = k_A - n_A p_A$ and $r_B = k_B - n_B p_B$ are the
+Bernoulli residuals.
+
+#### 4×4 Hessian (block-sparse)
+
+$$
+\mathbf{H}_4 = \begin{pmatrix}
+n_A w_A + n_B w_B + \tau_\mu & n_A w_A & -2\mu\tau_\mu & 0 \\
+n_A w_A & n_A w_A + \tau_\delta & 0 & -2\delta_A\tau_\delta \\
+-2\mu\tau_\mu & 0 & 2(\mu^2 + 2b_\mu)\tau_\mu & 0 \\
+0 & -2\delta_A\tau_\delta & 0 & 2(\delta_A^2 + 2b_\delta)\tau_\delta
+\end{pmatrix}
+$$
+
+with $w_A = p_A(1-p_A)$, $w_B = p_B(1-p_B)$.
+
+#### Solver
+
+The MAP is found by **damped Newton iteration** in 4-D using the closed-form
+gradient and Hessian above (no external optimizer is invoked).
+As in the 2-D case, Newton's method uses the **Hessian** to compute the
+optimal step direction and size:
+
+$$
+\boldsymbol{\phi}_{t+1} = \boldsymbol{\phi}_t - \mathbf{H}^{-1}\,\nabla f
+$$
+
+This solves the linear system
+$\mathbf{H}\,\Delta\boldsymbol{\phi} = -\nabla f$ for the Newton step
+$\Delta\boldsymbol{\phi}$. Because it accounts for curvature, Newton
+converges **quadratically** near the optimum.
+
+The $4\times 4$ system is solved via `numpy.linalg.solve`, and an Armijo
+backtracking line search guarantees monotone descent even from a poor
+starting point. Convergence is checked by the $\ell^\infty$-norm of the
+gradient; a warning is emitted if `max_iter` is reached without convergence.
+
+#### Marginal posterior on $(\mu, \delta_A)$
+
+After convergence the full $4\times 4$ Laplace covariance is
+
+$$
+\boldsymbol{\Sigma}_4 = \mathbf{H}_4^{-1}
+$$
+
+The marginal 2×2 covariance for $(\mu, \delta_A)$ is the top-left block
+$\boldsymbol{\Sigma}_{2} = [\boldsymbol{\Sigma}_4]_{1:2,\,1:2}$, which
+already incorporates the additional uncertainty from learning
+$\sigma_\mu$ and $\sigma_\delta$. Samples from the Laplace posterior are
+drawn from $\mathcal{N}\!\bigl(\hat{\boldsymbol{\theta}}_\text{MAP},\, \boldsymbol{\Sigma}_2\bigr)$.
+
+#### Savage–Dickey Bayes factor (hierarchical)
+
+Under the hierarchical model the marginal prior on $\delta_A$ (after
+integrating out $\sigma_\delta^2$) is a **Student-$t$** distribution:
+
+$$
+\delta_A \sim t_{2a_\delta}\!\Bigl(0,\; \sqrt{b_\delta / a_\delta}\Bigr)
+$$
+
+with $\nu = 2a_\delta$ degrees of freedom and scale $\sqrt{b_\delta / a_\delta}$.
+The Savage–Dickey ratio is therefore
+
+$$
+\text{BF}_{01} = \frac{p(\delta_A = 0 \mid y)}{p(\delta_A = 0)}
+= \frac{\mathcal{N}(0 \mid \hat{\delta}_A,\, \Sigma_{2,11})}
+       {t_{2a_\delta}(0 \mid 0,\, \sqrt{b_\delta / a_\delta})}
+$$
 
 ## When to use
 
@@ -383,6 +588,51 @@ on the materialised cumulative arrays.
 
 See the runnable notebook at
 `src/notebooks/sequential_paired_laplace_demo.ipynb` for the full demo.
+
+## Hierarchical example
+
+The hierarchical variant uses the same `PairedBayesPropTest` class — just
+pass `hyperprior_mu` and `hyperprior_delta` (see the
+[generative model](#hierarchical-logistic-regression-learned-scales)
+and [4-D Laplace math](#hierarchical-case-4-d) above).
+
+```python
+from bayesprop.resources.bayes_paired_laplace import PairedBayesPropTest
+from bayesprop.utils.utils import simulate_paired_scores
+
+sim = simulate_paired_scores(N=250, theta_A=0.69, theta_B=0.50, seed=42)
+
+model = PairedBayesPropTest(
+    hyperprior_mu=(3.0, 1.0),       # IG(3, 1) on σ²_μ
+    hyperprior_delta=(3.0, 1.0),    # IG(3, 1) on σ²_δ
+    seed=42,
+    n_samples=50_000,
+).fit(sim.y_A, sim.y_B)
+
+model.print_summary()
+
+d = model.decide()
+print(f"BF₁₀ = {d.bayes_factor.BF_10:.2f}  →  {d.bayes_factor.decision}")
+```
+
+The fitted model stores the learned MAP prior scales:
+
+```python
+laplace = model.laplace
+print(f"Learned σ_μ (MAP)  = {laplace['sigma_mu_map']:.4f}")
+print(f"Learned σ_δ (MAP)  = {laplace['sigma_delta_map']:.4f}")
+print(f"Hierarchical mode: {laplace['hierarchical']}")
+```
+
+### When to use the hierarchical variant
+
+- You are **unsure about a sensible value for $\sigma_\delta$** and want the
+  data to inform it rather than commit to a fixed slab width.
+- You want a **Bayes factor that is robust** to the Jeffreys–Lindley paradox.
+- You have enough data ($n \gtrsim 50$) for the 4-D Laplace to be accurate.
+
+For a fixed-prior analysis where you deliberately choose $\sigma_\delta$,
+set `hyperprior_mu=None, hyperprior_delta=None` (the default).
 
 ## Inputs and binarisation
 

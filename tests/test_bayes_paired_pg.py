@@ -508,3 +508,171 @@ class TestPairedPGDGPRecovery:
             )
             < 0.25
         )
+
+
+# ── Hierarchical PG tests ────────────────────────────────────
+
+
+class TestHierarchicalPGInit:
+    """Tests for hierarchical PG constructor validation."""
+
+    def test_both_hyperpriors_none_ok(self) -> None:
+        """Default (fixed-prior) mode should work."""
+        model = PairedBayesPropTestPG(seed=0)
+        assert model.hyperprior_mu is None
+        assert model.hyperprior_delta is None
+
+    def test_both_hyperpriors_set_ok(self) -> None:
+        """Setting both hyperpriors should work."""
+        model = PairedBayesPropTestPG(
+            hyperprior_mu=(3.0, 1.0), hyperprior_delta=(3.0, 1.0)
+        )
+        assert model.hyperprior_mu == (3.0, 1.0)
+        assert model.hyperprior_delta == (3.0, 1.0)
+
+    def test_only_mu_raises(self) -> None:
+        """Setting only hyperprior_mu should raise ValueError."""
+        with pytest.raises(ValueError, match="both be set or both be None"):
+            PairedBayesPropTestPG(hyperprior_mu=(3.0, 1.0))
+
+    def test_only_delta_raises(self) -> None:
+        """Setting only hyperprior_delta should raise ValueError."""
+        with pytest.raises(ValueError, match="both be set or both be None"):
+            PairedBayesPropTestPG(hyperprior_delta=(3.0, 1.0))
+
+    def test_repr_shows_hierarchical(self) -> None:
+        """__repr__ should indicate hierarchical mode."""
+        model = PairedBayesPropTestPG(
+            hyperprior_mu=(3.0, 1.0), hyperprior_delta=(3.0, 1.0)
+        )
+        assert "hierarchical" in repr(model)
+
+
+class TestHierarchicalPGFit:
+    """Tests for fitting the hierarchical PG model."""
+
+    @pytest.fixture
+    def hier_model(
+        self, paired_data: tuple[np.ndarray, np.ndarray]
+    ) -> PairedBayesPropTestPG:
+        """Fit a hierarchical PG model with small MCMC budget."""
+        y_a, y_b = paired_data
+        return PairedBayesPropTestPG(
+            hyperprior_mu=(3.0, 1.0),
+            hyperprior_delta=(3.0, 1.0),
+            seed=42,
+            n_iter=400,
+            burn_in=100,
+            n_chains=2,
+        ).fit(y_a, y_b)
+
+    def test_chains_shape(self, hier_model: PairedBayesPropTestPG) -> None:
+        """Chains should have correct shape."""
+        assert hier_model.chains.shape == (2, 300, 2)
+
+    def test_samples_pooled(self, hier_model: PairedBayesPropTestPG) -> None:
+        """Pooled samples should have correct shape."""
+        assert hier_model.samples.shape == (600, 2)
+
+    def test_sigma_sq_mu_samples(self, hier_model: PairedBayesPropTestPG) -> None:
+        """σ²_μ samples should be stored and positive."""
+        assert hier_model.sigma_sq_mu_samples is not None
+        assert hier_model.sigma_sq_mu_samples.shape == (600,)
+        assert np.all(hier_model.sigma_sq_mu_samples > 0)
+
+    def test_sigma_sq_delta_samples(self, hier_model: PairedBayesPropTestPG) -> None:
+        """σ²_δ samples should be stored and positive."""
+        assert hier_model.sigma_sq_delta_samples is not None
+        assert hier_model.sigma_sq_delta_samples.shape == (600,)
+        assert np.all(hier_model.sigma_sq_delta_samples > 0)
+
+    def test_fixed_model_no_variance_samples(
+        self, paired_data: tuple[np.ndarray, np.ndarray]
+    ) -> None:
+        """Fixed-prior model should not store variance samples."""
+        y_a, y_b = paired_data
+        model = PairedBayesPropTestPG(seed=42, n_iter=200, burn_in=50).fit(y_a, y_b)
+        assert model.sigma_sq_mu_samples is None
+        assert model.sigma_sq_delta_samples is None
+
+    def test_summary_populated(self, hier_model: PairedBayesPropTestPG) -> None:
+        """Summary should be populated after fit."""
+        assert hier_model.summary is not None
+        assert isinstance(hier_model.summary, PairedSummary)
+
+    def test_trace_summary_populated(self, hier_model: PairedBayesPropTestPG) -> None:
+        """Trace summary should be a DataFrame."""
+        assert isinstance(hier_model.trace_summary, pd.DataFrame)
+        assert "delta_A" in hier_model.trace_summary.index
+        assert "mu" in hier_model.trace_summary.index
+
+    def test_savage_dickey_uses_student_t(
+        self, hier_model: PairedBayesPropTestPG
+    ) -> None:
+        """Savage-Dickey should use Student-t prior density in hierarchical mode."""
+        from scipy.stats import t as student_t_dist
+
+        bf = hier_model.savage_dickey_test()
+        a_d, b_d = hier_model.hyperprior_delta
+        nu = 2.0 * a_d
+        scale = np.sqrt(b_d / a_d)
+        expected_prior = student_t_dist.pdf(0, df=nu, loc=0, scale=scale)
+        assert abs(bf.prior_density_at_0 - expected_prior) < 1e-10
+
+    def test_decide_works(self, hier_model: PairedBayesPropTestPG) -> None:
+        """decide() should return a valid HypothesisDecision."""
+        d = hier_model.decide()
+        assert isinstance(d, HypothesisDecision)
+        assert d.bayes_factor is not None
+
+    def test_print_summary_runs(
+        self, hier_model: PairedBayesPropTestPG, capsys: pytest.CaptureFixture
+    ) -> None:
+        """print_summary should run without error and show learned scales."""
+        hier_model.print_summary()
+        out = capsys.readouterr().out
+        assert "Learned prior scales" in out
+        assert "\u03c3_\u03bc" in out
+        assert "\u03c3_\u03b4" in out
+
+    def test_mcmc_diagnostics(self, hier_model: PairedBayesPropTestPG) -> None:
+        """MCMC diagnostics should be computable."""
+        diag = hier_model.mcmc_diagnostics()
+        assert isinstance(diag, MCMCDiagnostics)
+        assert 0.9 < diag.delta_A.r_hat < 1.2
+        assert diag.delta_A.ess > 10
+
+    def test_ppc_pvalues(self, hier_model: PairedBayesPropTestPG) -> None:
+        """PPC p-values should be computable."""
+        ppc = hier_model.ppc_pvalues()
+        assert "mean(y_A)" in ppc
+
+    def test_hierarchical_vs_laplace_agreement(self) -> None:
+        """Hierarchical PG and Laplace δ_A posterior means should roughly agree."""
+        from bayesprop.utils.utils import simulate_paired_scores
+
+        sim = simulate_paired_scores(N=300, theta_A=0.69, theta_B=0.50, seed=42)
+
+        pg_model = PairedBayesPropTestPG(
+            hyperprior_mu=(3.0, 1.0),
+            hyperprior_delta=(3.0, 1.0),
+            seed=42,
+            n_iter=2000,
+            burn_in=500,
+            n_chains=2,
+        ).fit(sim.y_A, sim.y_B)
+
+        laplace_model = PairedBayesPropTest(
+            hyperprior_mu=(3.0, 1.0),
+            hyperprior_delta=(3.0, 1.0),
+            seed=42,
+            n_samples=10_000,
+        ).fit(sim.y_A, sim.y_B)
+
+        assert (
+            abs(
+                pg_model.summary.delta_A_posterior_mean
+                - laplace_model.summary.delta_A_posterior_mean
+            )
+            < 0.3
+        )
