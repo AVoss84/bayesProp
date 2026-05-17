@@ -6,6 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [0.1.1.3] - 2026-05-17
+### Added
+- **Unified paired facade** — new `PairedBayesPropTest` class in
+  `bayesprop.resources.bayes_paired` that dispatches to Laplace
+  (`"laplace"`), PG Gibbs (`"pg"`), or Bootstrap (`"bootstrap"`)
+  backends via a single `method` parameter. All common attributes and
+  methods are forwarded transparently to the selected backend.
+- `PairedBayesPropTestLaplace` alias exported from
+  `bayes_paired_laplace` for explicit Laplace backend access.
+- Backward-compatible re-export of `PairedBayesPropTest` from
+  `bayes_paired_laplace` so existing imports keep working.
+
+### Changed
+- Laplace backend class renamed from `PairedBayesPropTest` to
+  `_PairedLaplace` (internal); public access via the unified facade or
+  the `PairedBayesPropTestLaplace` alias.
+- Module-level docstring imports updated from `ai_eval.*` to
+  `bayesprop.*` across `bayes_nonpaired`, `bayes_paired_laplace`, and
+  `bayes_paired_pg`.
+
+
 ## [0.1.1.2] - 2026-05-17
 ### Added
 - **Hierarchical PG Gibbs model** — `PairedBayesPropTestPG` now accepts
