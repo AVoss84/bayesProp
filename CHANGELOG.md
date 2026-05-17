@@ -6,6 +6,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [0.1.1.2] - 2026-05-17
+### Added
+- **Hierarchical PG Gibbs model** — `PairedBayesPropTestPG` now accepts
+  `hyperprior_mu` and `hyperprior_delta` arguments (Inverse-Gamma
+  hyperpriors on σ²_μ and σ²_δ). The Gibbs sampler adds two conjugate
+  IG updates per iteration, yielding exact posterior inference over
+  `(μ, δ_A, σ²_μ, σ²_δ)`. New attributes `sigma_sq_mu_samples` and
+  `sigma_sq_delta_samples` store the pooled posterior draws.
+- Savage-Dickey Bayes factor for the hierarchical PG model automatically
+  uses the marginal Student-_t_ prior on δ_A induced by the IG
+  hyperprior.
+- `plot_trace()` now renders additional σ_μ and σ_δ rows (trace + ACF)
+  when hyperpriors are active.
+- Hierarchical section in the PG Gibbs notebook
+  (`bayesian_AB_model_comparison_paired_gibbs.ipynb`): fit, trace plot,
+  posterior KDEs, Savage-Dickey BF, and fixed-vs-hierarchical comparison
+  table.
+- Hierarchical model documentation in `docs/mkdocs/docs/guide/paired_pg.md`:
+  DAG, extended Gibbs steps, Student-_t_ marginal prior, and a full
+  worked example.
+
+### Changed
+- Renamed "Model A / Model B" labels to "Group A / Group B" in
+  `plot_forest()` defaults and `print()` statements across
+  `bayes_nonpaired.py`, `bayes_paired_laplace.py`, and
+  `bayes_paired_pg.py`. PPC subplot titles also updated.
+- BF₁₀ display in the PG Gibbs notebook comparison cell now uses
+  `_format_bf()` and `log₁₀(BF₁₀)` instead of raw floats.
+
+
 ## [0.1.1.1] - 2026-05-16
 ### Added
 - Abstract base class `BaseBayesPropTest` in `bayesprop.resources.base`
