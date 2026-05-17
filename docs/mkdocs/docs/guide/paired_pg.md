@@ -300,7 +300,6 @@ density at zero instead of the Gaussian prior density.
 ```python
 import numpy as np
 from bayesprop.resources.bayes_paired import PairedBayesPropTest
-from bayesprop.resources.bayes_paired_pg import sigmoid
 from bayesprop.utils.utils import simulate_paired_scores
 
 sim = simulate_paired_scores(N=250, theta_A=0.73, theta_B=0.50, sigma_theta=0.0, seed=42)
