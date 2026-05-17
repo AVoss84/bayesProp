@@ -35,9 +35,8 @@ Please check out our [Getting Started](https://avoss84.github.io/bayesProp/getti
 | Model | Class | Method | When to use |
 |---|---|---|---|
 | **Non-paired Beta–Bernoulli** | `NonPairedBayesPropTest` | Conjugate Beta posteriors per arm; P(B>A) by quadrature, Δ summaries by Monte Carlo | Independent groups, exact & fast |
-| **Paired Logistic (Laplace)** | `PairedBayesPropTest` | MAP + Laplace approximation | Paired scores, large *n*, fast iteration |
 | **Paired Hierarchical Logistic (Laplace)** | `PairedBayesPropTest` | 4-D MAP + Laplace with Inverse-Gamma hyperpriors on both prior variances | Paired scores, automatic prior-scale learning, robust to prior misspecification |
-| **Paired Logistic (Pólya–Gamma)** | `PairedBayesPropTestPG` | Exact Gibbs sampling | Paired scores, small *n*, exact posterior |
+| **Paired Hierarchical Logistic (Pólya–Gamma)** | `PairedBayesPropTestPG` | Exact Gibbs sampling with conjugate IG hyperprior updates | Paired scores, small *n*, exact posterior with learned prior scales |
 | **Paired Bayesian Bootstrap** | `PairedBayesPropTestBB` | Nonparametric — Dirichlet weights on the empirical distribution of paired differences | Paired scores, no prior elicitation, robustness to likelihood misspecification (ROPE-driven; no Savage–Dickey BF) |
 
 ## Quick start
