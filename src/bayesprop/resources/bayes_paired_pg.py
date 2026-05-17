@@ -6,13 +6,13 @@ exact Pólya-Gamma data augmentation (Gibbs sampling), performing hypothesis
 testing via the Savage-Dickey density ratio, running posterior-predictive
 diagnostics, and generating publication-ready plots.
 
-Compared to the Laplace approximation in :mod:`ai_eval.resources.bayes_paired_laplace`,
+Compared to the Laplace approximation in :mod:`bayesprop.resources.bayes_paired_laplace`,
 the PG sampler provides exact (up to MCMC error) posterior inference and
 multi-chain MCMC diagnostics (R-hat, ESS).
 
 Typical workflow::
 
-    from ai_eval.resources.bayes_paired_pg import PairedBayesPropTestPG
+    from bayesprop.resources.bayes_paired_pg import PairedBayesPropTestPG
 
     model = PairedBayesPropTestPG(seed=42).fit(y_A, y_B)
     model.print_summary()

@@ -40,10 +40,10 @@ All four model classes inherit from `BaseBayesPropTest` and expose the same core
 
 ### Parametric-only methods
 
-The following are available on the three parametric models (`NonPairedBayesPropTest`, `PairedBayesPropTest`, `PairedBayesPropTestPG`) but **not** on the Bayesian bootstrap (`PairedBayesPropTestBB`), which has no parametric prior on Δ:
+The following are available on the three parametric models (`NonPairedBayesPropTest`, `PairedBayesPropTest(method="laplace")`, `PairedBayesPropTest(method="pg")`) but **not** on the Bayesian bootstrap (`PairedBayesPropTest(method="bootstrap")`), which has no parametric prior on Δ:
 
 | Method | Return type | Description |
 |--------|-------------|-------------|
 | `model.savage_dickey_test(null_value=0.0)` | `SavageDickeyResult` | Savage-Dickey Bayes factor at the point null |
-| `Model.posterior_probability_H0(BF_01, prior_H0=0.5)` | `PosteriorProbH0Result` | Static: convert a BF₀₁ to posterior P(H₀ ∣ D) |
+| `model.posterior_probability_H0(BF_01, prior_H0=0.5)` | `PosteriorProbH0Result` | Static: convert a BF₀₁ to posterior P(H₀ ∣ D) |
 | `model.plot_savage_dickey()` | `None` | Prior vs posterior density with BF annotation |

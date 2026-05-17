@@ -10,7 +10,7 @@ descriptive statistics + threshold-sweep summary table.
 
 Typical workflow::
 
-    from ai_eval.resources.bayes_nonpaired import NonPairedBayesPropTest, descriptive_summary
+    from bayesprop.resources.bayes_nonpaired import NonPairedBayesPropTest, descriptive_summary
 
     bb = NonPairedBayesPropTest(threshold=0.5)
     result = bb.test(scores_A, scores_B)

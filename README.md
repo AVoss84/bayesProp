@@ -32,18 +32,20 @@ Please check out our [Getting Started](https://avoss84.github.io/bayesProp/getti
 
 ## Models
 
-| Model | Class | Method | When to use |
+All paired methods are accessible through a single **unified facade** — `PairedBayesPropTest(method=…)` — that dispatches to the chosen inference backend.
+
+| Model | Class / `method` | Method | When to use |
 |---|---|---|---|
 | **Non-paired Beta–Bernoulli** | `NonPairedBayesPropTest` | Conjugate Beta posteriors per arm; P(B>A) by quadrature, Δ summaries by Monte Carlo | Independent groups, exact & fast |
-| **Paired Hierarchical Logistic (Laplace)** | `PairedBayesPropTest` | 4-D MAP + Laplace with Inverse-Gamma hyperpriors on both prior variances | Paired scores, automatic prior-scale learning, robust to prior misspecification |
-| **Paired Hierarchical Logistic (Pólya–Gamma)** | `PairedBayesPropTestPG` | Exact Gibbs sampling with conjugate IG hyperprior updates | Paired scores, small *n*, exact posterior with learned prior scales |
-| **Paired Bayesian Bootstrap** | `PairedBayesPropTestBB` | Nonparametric — Dirichlet weights on the empirical distribution of paired differences | Paired scores, no prior elicitation, robustness to likelihood misspecification (ROPE-driven; no Savage–Dickey BF) |
+| **Paired Logistic (Laplace)** | `PairedBayesPropTest(method="laplace")` | MAP + Laplace (fixed or hierarchical IG hyperpriors) | Paired scores, fast, default |
+| **Paired Logistic (Pólya–Gamma)** | `PairedBayesPropTest(method="pg")` | Exact Gibbs sampling (fixed or hierarchical IG hyperpriors) | Paired scores, small *n*, exact posterior |
+| **Paired Bayesian Bootstrap** | `PairedBayesPropTest(method="bootstrap")` | Nonparametric — Dirichlet weights on paired differences | Paired scores, no prior elicitation, ROPE-driven (no Savage–Dickey BF) |
 
 ## Quick start
 
 ```python
 import numpy as np
-from bayesprop.resources.bayes_paired_laplace import PairedBayesPropTest
+from bayesprop.resources.bayes_paired import PairedBayesPropTest
 
 # Paired binary data (y_A[i] and y_B[i] refer to the same item)
 y_A = np.array([1,1,0,1,1,0,1,1,1,1,1,1,1,0,1,1,1,0,1,1])     # 16/20 = 0.80

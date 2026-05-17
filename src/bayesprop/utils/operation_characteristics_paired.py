@@ -46,8 +46,8 @@ from typing import Literal
 import numpy as np
 import pandas as pd
 
+from bayesprop.resources.bayes_paired import PairedBayesPropTest
 from bayesprop.resources.bayes_paired_laplace import (
-    PairedBayesPropTest,
     SequentialPairedBayesPropTest,
 )
 from bayesprop.resources.bayes_nonpaired import classify_bf

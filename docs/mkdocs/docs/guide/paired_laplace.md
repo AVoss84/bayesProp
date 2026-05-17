@@ -326,7 +326,7 @@ For exact posterior inference with convergence diagnostics, see
 ### 1. Simulate paired data
 
 ```python
-from bayesprop.resources.bayes_paired_laplace import PairedBayesPropTest
+from bayesprop.resources.bayes_paired import PairedBayesPropTest
 from bayesprop.utils.utils import simulate_paired_scores
 
 sim = simulate_paired_scores(N=250, theta_A=0.69, theta_B=0.50, sigma_theta=0.0, seed=42)
@@ -597,7 +597,7 @@ pass `hyperprior_mu` and `hyperprior_delta` (see the
 and [4-D Laplace math](#hierarchical-case-4-d) above).
 
 ```python
-from bayesprop.resources.bayes_paired_laplace import PairedBayesPropTest
+from bayesprop.resources.bayes_paired import PairedBayesPropTest
 from bayesprop.utils.utils import simulate_paired_scores
 
 sim = simulate_paired_scores(N=250, theta_A=0.69, theta_B=0.50, seed=42)

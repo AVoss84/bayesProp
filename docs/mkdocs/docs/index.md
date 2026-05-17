@@ -40,11 +40,14 @@ print(f"ROPE: {d.rope.decision}  ({d.rope.pct_in_rope:.1%} in ROPE)")
 
 ## Models at a glance
 
-| Model | Module | Design | Inference |
+All paired methods are accessible through a single **unified facade**: `PairedBayesPropTest(method=…)`.
+
+| Model | Class / `method` | Design | Inference |
 |-------|--------|--------|-----------|
 | `NonPairedBayesPropTest` | `bayes_nonpaired` | Independent groups | Conjugate Beta-Bernoulli |
-| `PairedBayesPropTest` | `bayes_paired_laplace` | Paired observations | Laplace approximation (fixed or hierarchical priors) |
-| `PairedBayesPropTestPG` | `bayes_paired_pg` | Paired observations | Pólya-Gamma Gibbs sampler |
+| `PairedBayesPropTest(method="laplace")` | `bayes_paired` | Paired observations | Laplace approximation (fixed or hierarchical priors) |
+| `PairedBayesPropTest(method="pg")` | `bayes_paired` | Paired observations | Pólya-Gamma Gibbs sampler |
+| `PairedBayesPropTest(method="bootstrap")` | `bayes_paired` | Paired observations | Nonparametric Bayesian bootstrap |
 
 ## Navigation
 

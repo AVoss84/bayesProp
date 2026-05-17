@@ -41,7 +41,7 @@ boundary:
 
 ```python
 from bayesprop.resources.bayes_nonpaired import classify_bf
-from bayesprop.resources.bayes_paired_laplace import PairedBayesPropTest
+from bayesprop.resources.bayes_paired import PairedBayesPropTest
 
 bf10 = PairedBayesPropTest().fit(y_A, y_B).savage_dickey_test().BF_10
 category = classify_bf(bf10, bf_upper=3.0, bf_lower=1.0 / 3.0)

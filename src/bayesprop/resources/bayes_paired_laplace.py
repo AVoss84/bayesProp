@@ -7,11 +7,11 @@ hypothesis testing via the Savage-Dickey density ratio, running
 posterior-predictive diagnostics, and generating publication-ready plots.
 
 For exact MCMC inference via Pólya-Gamma data augmentation, see
-:mod:`ai_eval.resources.bayes_paired_pg`.
+:mod:`bayesprop.resources.bayes_paired_pg`.
 
 Typical workflow::
 
-    from ai_eval.resources.bayes_paired_laplace import PairedBayesPropTest
+    from bayesprop.resources.bayes_paired import PairedBayesPropTest
 
     model = PairedBayesPropTest(seed=42).fit(y_A, y_B)
     model.print_summary()
@@ -371,8 +371,8 @@ def _hierarchical_laplace_from_counts(
     return np.array([mu, delta]), cov_2d, H_2d, sigma_mu_map, sigma_delta_map
 
 
-class PairedBayesPropTest(BaseBayesPropTest):
-    """Pooled Bernoulli logistic model for paired A/B comparison.
+class _PairedLaplace(BaseBayesPropTest):
+    """Pooled Bernoulli logistic model for paired A/B comparison (Laplace backend).
 
     Uses Laplace approximation (MAP + Hessian) instead of full MCMC
     for fast, analytic posterior inference on binarized scores.
@@ -504,7 +504,7 @@ class PairedBayesPropTest(BaseBayesPropTest):
     #  Fitting
     # ------------------------------------------------------------------ #
 
-    def fit(self, y_A_obs: np.ndarray, y_B_obs: np.ndarray) -> PairedBayesPropTest:
+    def fit(self, y_A_obs: np.ndarray, y_B_obs: np.ndarray) -> _PairedLaplace:
         """Fit the pooled Bernoulli model via Laplace approximation.
 
         Reduces ``(y_A_obs, y_B_obs)`` to the four sufficient statistics
@@ -1490,7 +1490,7 @@ class PairedBayesPropTest(BaseBayesPropTest):
 
     @staticmethod
     def plot_forest(
-        results: dict[str, "PairedBayesPropTest"],
+        results: dict[str, "_PairedLaplace"],
         label_A: str = "Group A",
         label_B: str = "Group B",
         **kwargs,
@@ -1574,7 +1574,7 @@ class PairedBayesPropTest(BaseBayesPropTest):
         plt.show()
 
     @staticmethod
-    def print_comparison_table(results: dict[str, "PairedBayesPropTest"]) -> None:
+    def print_comparison_table(results: dict[str, "_PairedLaplace"]) -> None:
         """Print a formatted comparison table across metrics."""
         print("=" * 80)
         print(
@@ -1595,6 +1595,20 @@ class PairedBayesPropTest(BaseBayesPropTest):
             )
         print("=" * 80)
 
+
+# ====================================================================== #
+#  Backward-compatibility alias for direct Laplace backend access
+# ====================================================================== #
+
+PairedBayesPropTestLaplace = _PairedLaplace
+"""Explicit alias for the Laplace backend class."""
+
+
+# ====================================================================== #
+#  Backward-compatibility re-export of the unified facade
+# ====================================================================== #
+
+from bayesprop.resources.bayes_paired import PairedBayesPropTest  # noqa: E402, F401
 
 # ====================================================================== #
 #  Sequential / streaming paired Laplace test
@@ -1687,7 +1701,7 @@ class SequentialPairedBayesPropTest:
         self.history: list[SequentialLaplaceLookResult] = []
         self._stopped: bool = False
         self._stop_reason: str | None = None
-        self._last_model: PairedBayesPropTest | None = None
+        self._last_model: _PairedLaplace | None = None
 
     # ------------------------------------------------------------------ #
     #  Public API
@@ -1704,8 +1718,8 @@ class SequentialPairedBayesPropTest:
         return self._stop_reason
 
     @property
-    def last_model(self) -> PairedBayesPropTest | None:
-        """The most recently fitted :class:`PairedBayesPropTest` (or None)."""
+    def last_model(self) -> _PairedLaplace | None:
+        """The most recently fitted :class:`_PairedLaplace` (or None)."""
         return self._last_model
 
     def update(
@@ -1896,9 +1910,9 @@ class SequentialPairedBayesPropTest:
         p_B_s = 1.0 / (1.0 + np.exp(-mu_s))
         delta_s = p_A_s - p_B_s
 
-        # Populate a PairedBayesPropTest in a fitted state without calling
+        # Populate a _PairedLaplace in a fitted state without calling
         # .fit() — we already have the Laplace solution.
-        model = PairedBayesPropTest(
+        model = _PairedLaplace(
             prior_sigma_delta=self.prior_sigma_delta,
             seed=self.seed,
             n_samples=self.n_samples,

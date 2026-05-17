@@ -9,8 +9,8 @@ import pytest
 
 matplotlib.use("Agg")
 
+from bayesprop.resources.bayes_paired import PairedBayesPropTest
 from bayesprop.resources.bayes_paired_laplace import (
-    PairedBayesPropTest,
     SequentialPairedBayesPropTest,
     _format_bf,
     _hierarchical_laplace_from_counts,

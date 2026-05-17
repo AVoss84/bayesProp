@@ -9,7 +9,7 @@ import pytest
 
 matplotlib.use("Agg")
 
-from bayesprop.resources.bayes_paired_laplace import PairedBayesPropTest
+from bayesprop.resources.bayes_paired import PairedBayesPropTest
 from bayesprop.resources.bayes_paired_pg import (
     PairedBayesPropTestPG,
     _build_design_matrix,

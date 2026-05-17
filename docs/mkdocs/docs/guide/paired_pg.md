@@ -290,7 +290,7 @@ density at zero instead of the Gaussian prior density.
 
 !!! note
     The PG sampler is slower than the Laplace approximation. For exploration,
-    start with `PairedBayesPropTest` and switch to `PairedBayesPropTestPG`
+    start with `PairedBayesPropTest(method="laplace")` and switch to `method="pg"`
     for final analysis.
 
 ## Step-by-step example
@@ -299,8 +299,8 @@ density at zero instead of the Gaussian prior density.
 
 ```python
 import numpy as np
-from bayesprop.resources.bayes_paired_pg import PairedBayesPropTestPG, sigmoid
-from bayesprop.resources.bayes_paired_laplace import PairedBayesPropTest
+from bayesprop.resources.bayes_paired import PairedBayesPropTest
+from bayesprop.resources.bayes_paired_pg import sigmoid
 from bayesprop.utils.utils import simulate_paired_scores
 
 sim = simulate_paired_scores(N=250, theta_A=0.73, theta_B=0.50, sigma_theta=0.0, seed=42)
@@ -320,7 +320,8 @@ Fraction y=1:  A=72.8%,  B=47.6%
 ### 2. Fit the PG Gibbs model
 
 ```python
-pg_model = PairedBayesPropTestPG(
+pg_model = PairedBayesPropTest(
+    method="pg",
     prior_sigma_delta=1.0,
     prior_sigma_mu=2.0,
     seed=42,
@@ -582,20 +583,21 @@ See the [BFDA guide](bfda.md) for the full sample-size planning workflow.
 
 ## Hierarchical example
 
-The hierarchical variant uses the same `PairedBayesPropTestPG` class — just
+The hierarchical variant uses the same unified facade — just
 pass `hyperprior_mu` and `hyperprior_delta` (see the
 [hierarchical model](#hierarchical-model-learned-prior-scales) and
 [extended Gibbs sampler](#extended-gibbs-sampler) above).
 
 ```python
-from bayesprop.resources.bayes_paired_pg import PairedBayesPropTestPG
+from bayesprop.resources.bayes_paired import PairedBayesPropTest
 from bayesprop.resources.bayes_paired_laplace import _format_bf
 from bayesprop.utils.utils import simulate_paired_scores
 import numpy as np
 
 sim = simulate_paired_scores(N=250, theta_A=0.69, theta_B=0.50, seed=42)
 
-pg_hier = PairedBayesPropTestPG(
+pg_hier = PairedBayesPropTest(
+    method="pg",
     seed=42,
     n_iter=2000,
     burn_in=500,
@@ -665,7 +667,7 @@ Learned σ_δ:  mean = 0.880  95% CI = [0.459, 1.828]
 
 ```python
 # Fit a fixed-prior model for comparison
-pg_fixed = PairedBayesPropTestPG(seed=42).fit(sim.y_A, sim.y_B)
+pg_fixed = PairedBayesPropTest(method="pg", seed=42).fit(sim.y_A, sim.y_B)
 
 d_fix = pg_fixed.decide()
 bf_fix = d_fix.bayes_factor
@@ -695,12 +697,12 @@ set `hyperprior_mu=None, hyperprior_delta=None` (the default).
 
 ## Inputs and binarisation
 
-`PairedBayesPropTestPG` accepts both already-binary `{0, 1}` inputs and
+`PairedBayesPropTest(method="pg")` accepts both already-binary `{0, 1}` inputs and
 continuous scores in `[0, 1]`. Continuous inputs are auto-binarised at a
 configurable `threshold` (default `0.5`):
 
 ```python
-model = PairedBayesPropTestPG(threshold=0.5, verbose=True).fit(scores_A, scores_B)
+model = PairedBayesPropTest(method="pg", threshold=0.5, verbose=True).fit(scores_A, scores_B)
 ```
 
 Values strictly outside `[0, 1]` or `NaN` raise `ValueError` instead of

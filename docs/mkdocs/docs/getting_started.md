@@ -45,7 +45,7 @@ model.print_summary()
 
 # Unified decision (Bayes factor + P(H₀) + ROPE)
 d = model.decide()
-print(f"BF₁₀ = {d.bayes_factor.BF_10:.2f}  →  {d.bayes_factor.decision}")
+print(f"BF_10 = {d.bayes_factor.BF_10:.2f}  →  {d.bayes_factor.decision}")
 print(f"ROPE: {d.rope.decision}  ({d.rope.pct_in_rope:.1%} in ROPE)")
 
 # Visualise
@@ -58,7 +58,7 @@ model.plot_savage_dickey()
 Use this when **both** conditions (e.g. treatment A and treatment B, or version A and version B) are evaluated on the **same** items or subjects.
 
 ```python
-from bayesprop.resources.bayes_paired_laplace import PairedBayesPropTest
+from bayesprop.resources.bayes_paired import PairedBayesPropTest
 from bayesprop.utils.utils import simulate_paired_scores
 
 # Simulate paired binary data (y_A[i] and y_B[i] refer to the same item/subject)
@@ -93,14 +93,11 @@ print(f"Learned σ_δ (MAP) = {model_h.laplace['sigma_delta_map']:.4f}")
 For exact MCMC inference with convergence diagnostics:
 
 ```python
-from bayesprop.resources.bayes_paired_pg import PairedBayesPropTestPG
-
-# Reuse paired data from above
-model = PairedBayesPropTestPG(seed=42)  # defaults: n_iter=1000, burn_in=200, n_chains=2
-model.fit(y_A, y_B)
+# Reuse paired data from above — just switch the method
+model = PairedBayesPropTest(method="pg", seed=42).fit(y_A, y_B)
 model.print_summary()
 
-# MCMC diagnostics
+# MCMC diagnostics (PG-specific, forwarded transparently)
 diag = model.mcmc_diagnostics()
 print(f"R-hat (δ_A): {diag.delta_A.r_hat:.3f}")
 print(f"ESS (δ_A):   {diag.delta_A.ess:.0f}")

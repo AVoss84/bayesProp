@@ -4,8 +4,8 @@
 
 The paired Bayesian-bootstrap test ([Rubin, 1981](#references)) is a
 **nonparametric** alternative to
-[`PairedBayesPropTest`](paired_laplace.md) (Laplace) and
-[`PairedBayesPropTestPG`](paired_pg.md) (Pólya–Gamma Gibbs). Instead of
+[`PairedBayesPropTest(method="laplace")`](paired_laplace.md) and
+[`PairedBayesPropTest(method="pg")`](paired_pg.md). Instead of
 specifying a parametric likelihood or a prior on a logit-scale effect,
 it places a flat Dirichlet "prior" over the empirical distribution of
 paired differences and reads the posterior on the average treatment
@@ -50,13 +50,13 @@ more bootstrap-like); values $> 1$ smooth toward the empirical mean.
 
 ```python
 import numpy as np
-from bayesprop.resources.bayes_paired_bootstrap import PairedBayesPropTestBB
+from bayesprop.resources.bayes_paired import PairedBayesPropTest
 
 # Paired binary outcomes (any 0/1 arrays of equal length).
 y_A = np.array([1, 1, 0, 1, 1, 0, 1, 1, 1, 0])
 y_B = np.array([0, 1, 0, 0, 1, 0, 0, 1, 0, 0])
 
-model = PairedBayesPropTestBB(n_samples=20_000, seed=42).fit(y_A, y_B)
+model = PairedBayesPropTest(method="bootstrap", n_samples=20_000, seed=42).fit(y_A, y_B)
 
 s = model.summary
 print(f"Posterior mean Δ = {s.mean_delta:+.4f}")
@@ -112,12 +112,12 @@ paired model (Laplace or Pólya–Gamma) with a Savage–Dickey BF — see
 
 | Question | Use |
 |---|---|
-| Need a Savage–Dickey BF for a point null | `PairedBayesPropTest` (Laplace) or `PairedBayesPropTestPG` (Pólya–Gamma) |
+| Need a Savage–Dickey BF for a point null | `PairedBayesPropTest(method="laplace")` or `PairedBayesPropTest(method="pg")` |
 | Need sequential / early-stopping support | `SequentialPairedBayesPropTest` |
-| Worried about likelihood misspecification | **`PairedBayesPropTestBB`** |
-| Sample size ≤ 30 and prior elicitation is acceptable | `PairedBayesPropTestPG` |
-| Sample size ≫ 100 and want a prior-free posterior on $\Delta$ | **`PairedBayesPropTestBB`** |
-| Want frequentist OC analysis with a McNemar baseline | `PairedBayesPropTest` (see [Frequentist Evaluation — Paired Laplace](frequentist_evaluation_paired.md)) |
+| Worried about likelihood misspecification | **`PairedBayesPropTest(method="bootstrap")`** |
+| Sample size ≤ 30 and prior elicitation is acceptable | `PairedBayesPropTest(method="pg")` |
+| Sample size ≫ 100 and want a prior-free posterior on $\Delta$ | **`PairedBayesPropTest(method="bootstrap")`** |
+| Want frequentist OC analysis with a McNemar baseline | `PairedBayesPropTest(method="laplace")` (see [Frequentist Evaluation — Paired Laplace](frequentist_evaluation_paired.md)) |
 
 ## Plotting
 
@@ -149,12 +149,12 @@ internally to keep peak memory below ~400 MB.
 
 ## Inputs and binarisation
 
-`PairedBayesPropTestBB` accepts both already-binary `{0, 1}` inputs and
+`PairedBayesPropTest(method="bootstrap")` accepts both already-binary `{0, 1}` inputs and
 continuous scores in `[0, 1]`. Continuous inputs are auto-binarised at a
 configurable `threshold` (default `0.5`):
 
 ```python
-model = PairedBayesPropTestBB(threshold=0.5, verbose=True).fit(scores_A, scores_B)
+model = PairedBayesPropTest(method="bootstrap", threshold=0.5, verbose=True).fit(scores_A, scores_B)
 ```
 
 Values strictly outside `[0, 1]` or `NaN` raise `ValueError` instead of
