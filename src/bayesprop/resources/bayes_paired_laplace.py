@@ -692,6 +692,7 @@ class _PairedLaplace(BaseBayesPropTest):
         self._check_fitted()
 
         # Marginal Laplace posterior on δ_A is exactly Gaussian.
+        # read off the mean and variance from the joint MAP and Hessian.
         delta_A_map = float(self.laplace["map"][1])
         sigma_post = float(np.sqrt(self.laplace["cov"][1, 1]))
         z = (null_value - delta_A_map) / sigma_post
