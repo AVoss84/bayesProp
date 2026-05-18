@@ -16,7 +16,7 @@ A Python package for **Bayesian hypothesis testing** of success-rate differences
 using analytic and approximate inference methods — **lightweight and dependency-lean** (no PyMC, Pyro, Stan, or other heavy probabilistic-programming frameworks required).
 Input data can be **binary** (0/1) or **real-valued on (0, 1)** — continuous scores are automatically binarized at a configurable threshold.
 Typical applications include comparing treatments, groups, items, model variants, or any two conditions whose outcomes can be expressed as proportions.
-Please check out our [Getting Started](https://avoss84.github.io/bayesProp/getting_started/) guide for installation and quick examples.
+Please check out our [Getting Started](https://avoss84.github.io/bayesProp/getting_started/) guide for installation and quick examples, and browse the [example notebooks](src/notebooks/) for end-to-end walkthroughs.
 
 ## Features
 
