@@ -55,3 +55,22 @@ All paired methods are accessible through a single **unified facade**: `PairedBa
 - [User Guide](guide/nonpaired.md) — detailed walkthroughs for each model
 - [Decision Rules](guide/decision_rules.md) — ROPE, Bayes factor, and the unified `decide()` API
 - [API Reference](api/index.md) — full module documentation
+
+## Citation
+
+If you use **BayesProp** in your research, please cite it. You can use the following BibTeX entry:
+
+```bibtex
+@software{vosseler_bayesprop,
+  author  = {Vosseler, Alexander},
+  title   = {{BayesProp: Bayesian A/B Testing for Proportions}},
+  year    = {2026},
+  version = {0.1.1.3},
+  url     = {https://github.com/AVoss84/bayesProp},
+  note    = {Python package}
+}
+```
+
+Or in plain text:
+
+> Vosseler, A. (2026). *BayesProp: Bayesian A/B Testing for Proportions* (Version 0.1.1.3) [Computer software]. https://github.com/AVoss84/bayesProp

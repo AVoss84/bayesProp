@@ -104,6 +104,25 @@ source .venv/bin/activate
 - pydantic (v2)
 - polyagamma
 
+## Citation
+
+If you use **BayesProp** in your research, please cite it. You can use the following BibTeX entry:
+
+```bibtex
+@software{vosseler_bayesprop,
+  author  = {Vosseler, Alexander},
+  title   = {{BayesProp: Bayesian A/B Testing for Proportions}},
+  year    = {2026},
+  version = {0.1.1.3},
+  url     = {https://github.com/AVoss84/bayesProp},
+  note    = {Python package}
+}
+```
+
+Or in plain text:
+
+> Vosseler, A. (2026). *BayesProp: Bayesian A/B Testing for Proportions* (Version 0.1.1.3) [Computer software]. https://github.com/AVoss84/bayesProp
+
 ## References
 
 - Gelman, A., Carlin, J. B., Stern, H. S., Dunson, D. B., Vehtari, A. & Rubin, D. B. (2013). *Bayesian Data Analysis* (3rd ed.). Chapman & Hall/CRC.
