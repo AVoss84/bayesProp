@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [0.1.1.5] - 2026-06-04
+### Changed
+- Citation metadata now uses the Zenodo **concept DOI**
+  (`10.5281/zenodo.20543002`), which always resolves to the latest
+  release, across the README, docs, and `CITATION.cff`.
+- DOI badge switched to a shields.io-rendered badge for reliable
+  rendering through GitHub's image proxy.
+
+
 ## [0.1.1.4] - 2026-06-04
 ### Added
 - **Citation support** — new "Citation" section in the README and docs

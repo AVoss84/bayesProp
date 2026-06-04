@@ -21,7 +21,7 @@ authors:
   - family-names: Vosseler
     given-names: Alexander
     # orcid: "https://orcid.org/0000-0000-0000-0000"  # add your ORCID iD if you have one
-version: 0.1.1.4
+version: 0.1.1.5
 date-released: 2026-06-04
 license: MIT
 repository-code: "https://github.com/AVoss84/bayesProp"
@@ -41,6 +41,5 @@ keywords:
   - Bayesian bootstrap
   - operating characteristics
   - paired comparison
-doi: 10.5281/zenodo.20543003
-# Tip: to always cite the latest version, replace the DOI above with the
-# concept DOI from the "Cite all versions" box on the Zenodo record.
+# Concept DOI: always resolves to the latest version on Zenodo.
+doi: 10.5281/zenodo.20543002

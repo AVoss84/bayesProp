@@ -11,7 +11,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Tests](https://github.com/AVoss84/bayesProp/actions/workflows/tests.yml/badge.svg)](https://github.com/AVoss84/bayesProp/actions/workflows/tests.yml)
 [![codecov](https://raw.githubusercontent.com/AVoss84/bayesProp/badges/coverage-badge.svg)](https://github.com/AVoss84/bayesProp/actions/workflows/tests.yml)
-[![DOI](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.20543003-blue)](https://doi.org/10.5281/zenodo.20543003)
+[![DOI](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.20543002-blue)](https://doi.org/10.5281/zenodo.20543002)
 
 A Python package for **Bayesian hypothesis testing** of success-rate differences in any Bernoulli-like experiment,
 using analytic and approximate inference methods — **lightweight and dependency-lean** (no PyMC, Pyro, Stan, or other heavy probabilistic-programming frameworks required).
@@ -114,18 +114,18 @@ If you use **BayesProp** in your research, please cite it. You can use the follo
   author    = {Vosseler, Alexander},
   title     = {{BayesProp: Bayesian A/B Testing for Proportions}},
   year      = {2026},
-  version   = {0.1.1.4},
+  version   = {0.1.1.5},
   publisher = {Zenodo},
-  doi       = {10.5281/zenodo.20543003},
-  url       = {https://doi.org/10.5281/zenodo.20543003}
+  doi       = {10.5281/zenodo.20543002},
+  url       = {https://doi.org/10.5281/zenodo.20543002}
 }
 ```
 
 Or in plain text:
 
-> Vosseler, A. (2026). *BayesProp: Bayesian A/B Testing for Proportions* (Version 0.1.1.4) [Computer software]. Zenodo. https://doi.org/10.5281/zenodo.20543003
+> Vosseler, A. (2026). *BayesProp: Bayesian A/B Testing for Proportions* (Version 0.1.1.5) [Computer software]. Zenodo. https://doi.org/10.5281/zenodo.20543002
 
-> **Note:** The DOI above resolves to the `v1.1.4` release. If you want a citation that always points to the latest version, use the **concept DOI** shown in the *"Cite all versions"* box on the [Zenodo record](https://doi.org/10.5281/zenodo.20543003). The `CITATION.cff` file in this repository keeps the citation metadata machine-readable.
+> **Note:** This is the **concept DOI**, which always resolves to the latest release. To cite a specific version instead, use that release's version DOI from its [Zenodo record](https://doi.org/10.5281/zenodo.20543002). The `CITATION.cff` file in this repository keeps the citation metadata machine-readable.
 
 ## References
 
