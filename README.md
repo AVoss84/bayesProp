@@ -11,7 +11,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Tests](https://github.com/AVoss84/bayesProp/actions/workflows/tests.yml/badge.svg)](https://github.com/AVoss84/bayesProp/actions/workflows/tests.yml)
 [![codecov](https://raw.githubusercontent.com/AVoss84/bayesProp/badges/coverage-badge.svg)](https://github.com/AVoss84/bayesProp/actions/workflows/tests.yml)
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20543003.svg)](https://doi.org/10.5281/zenodo.20543003)
+[![DOI](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.20543003-blue)](https://doi.org/10.5281/zenodo.20543003)
 
 A Python package for **Bayesian hypothesis testing** of success-rate differences in any Bernoulli-like experiment,
 using analytic and approximate inference methods — **lightweight and dependency-lean** (no PyMC, Pyro, Stan, or other heavy probabilistic-programming frameworks required).
