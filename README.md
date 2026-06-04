@@ -114,7 +114,7 @@ If you use **BayesProp** in your research, please cite it. You can use the follo
   author    = {Vosseler, Alexander},
   title     = {{BayesProp: Bayesian A/B Testing for Proportions}},
   year      = {2026},
-  version   = {0.1.1.5},
+  version   = {0.1.1.6},
   publisher = {Zenodo},
   doi       = {10.5281/zenodo.20543002},
   url       = {https://doi.org/10.5281/zenodo.20543002}
@@ -123,7 +123,7 @@ If you use **BayesProp** in your research, please cite it. You can use the follo
 
 Or in plain text:
 
-> Vosseler, A. (2026). *BayesProp: Bayesian A/B Testing for Proportions* (Version 0.1.1.5) [Computer software]. Zenodo. https://doi.org/10.5281/zenodo.20543002
+> Vosseler, A. (2026). *BayesProp: Bayesian A/B Testing for Proportions* (Version 0.1.1.6) [Computer software]. Zenodo. https://doi.org/10.5281/zenodo.20543002
 
 > **Note:** This is the **concept DOI**, which always resolves to the latest release. To cite a specific version instead, use that release's version DOI from its [Zenodo record](https://doi.org/10.5281/zenodo.20543002). The `CITATION.cff` file in this repository keeps the citation metadata machine-readable.
 

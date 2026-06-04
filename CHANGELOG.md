@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [0.1.1.6] - 2026-06-04
+### Fixed
+- Package logo now uses an absolute raw-GitHub URL so it renders on the
+  PyPI project page (relative paths only resolve on GitHub).
+
+
 ## [0.1.1.5] - 2026-06-04
 ### Changed
 - Citation metadata now uses the Zenodo **concept DOI**
