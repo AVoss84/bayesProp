@@ -41,5 +41,6 @@ keywords:
   - Bayesian bootstrap
   - operating characteristics
   - paired comparison
-# After your first Zenodo release, uncomment and fill in the concept DOI:
-# doi: 10.5281/zenodo.XXXXXXX
+doi: 10.5281/zenodo.20543003
+# Tip: to always cite the latest version, replace the DOI above with the
+# concept DOI from the "Cite all versions" box on the Zenodo record.
