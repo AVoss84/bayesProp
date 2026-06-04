@@ -65,12 +65,16 @@ If you use **BayesProp** in your research, please cite it. You can use the follo
   author  = {Vosseler, Alexander},
   title   = {{BayesProp: Bayesian A/B Testing for Proportions}},
   year    = {2026},
-  version = {0.1.1.3},
+  version = {0.1.1.4},
   url     = {https://github.com/AVoss84/bayesProp},
-  note    = {Python package}
+  note    = {Python package},
+  % doi = {10.5281/zenodo.XXXXXXX}  % add the Zenodo concept DOI once released
 }
 ```
 
 Or in plain text:
 
-> Vosseler, A. (2026). *BayesProp: Bayesian A/B Testing for Proportions* (Version 0.1.1.3) [Computer software]. https://github.com/AVoss84/bayesProp
+> Vosseler, A. (2026). *BayesProp: Bayesian A/B Testing for Proportions* (Version 0.1.1.4) [Computer software]. https://github.com/AVoss84/bayesProp
+
+!!! note
+    Once a [Zenodo](https://zenodo.org) DOI has been minted for a release, prefer citing the **concept DOI** (always points to the latest version) in publications — it is permanent and version-archived.

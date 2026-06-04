@@ -1,0 +1,30 @@
+{
+  "title": "BayesProp: Bayesian A/B Testing for Proportions",
+  "description": "A Python package for Bayesian hypothesis testing of success-rate differences in any Bernoulli-like experiment, using analytic and approximate inference methods. Supports paired and non-paired designs, Savage-Dickey Bayes factors, ROPE-based decisions, Bayes factor design analysis, and sequential testing.",
+  "upload_type": "software",
+  "license": "MIT",
+  "creators": [
+    {
+      "name": "Vosseler, Alexander"
+    }
+  ],
+  "keywords": [
+    "Bayesian inference",
+    "A/B testing",
+    "proportions",
+    "Bayes factor",
+    "hypothesis testing"
+  ],
+  "related_identifiers": [
+    {
+      "identifier": "https://github.com/AVoss84/bayesProp",
+      "relation": "isSupplementTo",
+      "scheme": "url"
+    },
+    {
+      "identifier": "https://pypi.org/project/BayesProp/",
+      "relation": "isIdenticalTo",
+      "scheme": "url"
+    }
+  ]
+}

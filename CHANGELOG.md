@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [0.1.1.4] - 2026-06-04
+### Added
+- **Citation support** — new "Citation" section in the README and docs
+  home page with BibTeX and plain-text formats.
+- `CITATION.cff` file enabling GitHub's "Cite this repository" button and
+  providing machine-readable citation metadata.
+- `.zenodo.json` metadata file for archiving releases on Zenodo and
+  minting a citable DOI.
+
+
 ## [0.1.1.3] - 2026-05-17
 ### Added
 - **Unified paired facade** — new `PairedBayesPropTest` class in

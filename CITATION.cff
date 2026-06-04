@@ -1,0 +1,45 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it using the metadata from this file."
+title: "BayesProp: Bayesian A/B Testing for Proportions"
+abstract: >-
+  A Python package for Bayesian hypothesis testing of success-rate differences
+  in any Bernoulli-like experiment, using analytic and approximate inference
+  methods. It is lightweight and dependency-lean, requiring no heavy
+  probabilistic-programming frameworks (PyMC, Pyro, Stan). Input data can be
+  binary (0/1) or real-valued on (0, 1), with continuous scores automatically
+  binarized at a configurable threshold. Typical applications include comparing
+  treatments, groups, items, model variants, or any two conditions whose
+  outcomes can be expressed as proportions. The package supports effect-size
+  inference for both paired and non-paired designs, hierarchical logistic
+  regression with Inverse-Gamma hyperpriors, Savage-Dickey Bayes factors,
+  posterior-of-the-null and Region of Practical Equivalence (ROPE) decisions,
+  posterior predictive checks, Bayes Factor Design Analysis (BFDA) for sample-size
+  planning, sequential/streaming designs with early stopping, calibrated-Bayes
+  operating-characteristic analysis, and publication-ready plots.
+type: software
+authors:
+  - family-names: Vosseler
+    given-names: Alexander
+    # orcid: "https://orcid.org/0000-0000-0000-0000"  # add your ORCID iD if you have one
+version: 0.1.1.4
+date-released: 2026-06-04
+license: MIT
+repository-code: "https://github.com/AVoss84/bayesProp"
+url: "https://github.com/AVoss84/bayesProp"
+keywords:
+  - Bayesian inference
+  - A/B testing
+  - proportions
+  - Bayes factor
+  - hypothesis testing
+  - Savage-Dickey
+  - ROPE
+  - Bayes factor design analysis
+  - sequential analysis
+  - hierarchical logistic regression
+  - Polya-Gamma
+  - Bayesian bootstrap
+  - operating characteristics
+  - paired comparison
+# After your first Zenodo release, uncomment and fill in the concept DOI:
+# doi: 10.5281/zenodo.XXXXXXX
